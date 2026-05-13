@@ -27,8 +27,8 @@ import {
   WalletCards
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react"; import { Suspense, useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react"; import { Suspense } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 type EmployeeField = {
   key: string;
   label: string;
