@@ -3,7 +3,7 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 type GeneratedForm = {
@@ -27,8 +27,7 @@ const moduleLabel: Record<string, string> = {
   finance: "財務管理",
   projects: "專案任務"
 };
-
-export default function FormsPage() {
+function FormsPageContent() {
   const [forms, setForms] = useState<GeneratedForm[]>([]);
   const searchParams = useSearchParams();
   const [keyword, setKeyword] = useState(searchParams.get("keyword") ?? "");
@@ -143,5 +142,12 @@ export default function FormsPage() {
         </div>
       )}
     </AppLayout>
+  );
+}
+export default function FormsPage() {
+  return (
+    <Suspense fallback={<div className="p-6">載入中...</div>}>
+      <FormsPageContent />
+    </Suspense>
   );
 }

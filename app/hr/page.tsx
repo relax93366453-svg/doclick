@@ -196,8 +196,7 @@ const tabs = [
 function money(value: number) {
   return `NT$ ${value.toLocaleString("zh-TW")}`;
 }
-
-export default function HrPage() {
+function HrPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const activeTab = searchParams.get("tab") ?? "overview";
@@ -814,5 +813,12 @@ function ReportCard({ icon, title, text, button, onClick }: { icon: ReactNode; t
       <p className="mt-2 text-sm leading-6 text-slate-500">{text}</p>
       <button className="btn-primary mt-5" onClick={onClick}><Download className="mr-2 h-4 w-4" />{button}</button>
     </div>
+  );
+}
+export default function HrPage() {
+  return (
+    <Suspense fallback={<div className="p-6">載入中...</div>}>
+      <HrPageContent />
+    </Suspense>
   );
 }
