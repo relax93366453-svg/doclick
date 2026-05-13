@@ -1,0 +1,494 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Status {
+  ACTIVE
+  INACTIVE
+  PENDING
+  APPROVED
+  REJECTED
+  ARCHIVED
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  plan      String   @default("Free")
+  users     User[]
+  roles     Role[]
+  forms     Form[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model User {
+  id           String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  name         String
+  email        String    @unique
+  passwordHash String
+  roleKey      String    @default("staff")
+  departmentId String?
+  branchId     String?
+  status       Status    @default(ACTIVE)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+}
+
+model Role {
+  id          String       @id @default(cuid())
+  workspaceId String
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id])
+  name        String
+  key         String
+  permissions Permission[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Permission {
+  id     String @id @default(cuid())
+  roleId String
+  role   Role   @relation(fields: [roleId], references: [id])
+  module String
+  action String
+  scope  String @default("own")
+}
+
+model Department {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  status      Status    @default(ACTIVE)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model Branch {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  region      String?
+  status      Status    @default(ACTIVE)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model Form {
+  id           String         @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace      @relation(fields: [workspaceId], references: [id])
+  name         String
+  description  String?
+  category     String?
+  isActive     Boolean        @default(true)
+  needApproval Boolean        @default(false)
+  fields       FormField[]
+  responses    FormResponse[]
+  status       Status         @default(ACTIVE)
+  createdById  String?
+  updatedById  String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  deletedAt    DateTime?
+}
+
+model FormField {
+  id        String   @id @default(cuid())
+  formId    String
+  form      Form     @relation(fields: [formId], references: [id])
+  type      String
+  label     String
+  key       String
+  required  Boolean  @default(false)
+  options   Json?
+  config    Json?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FormResponse {
+  id          String   @id @default(cuid())
+  workspaceId String
+  formId      String
+  form        Form     @relation(fields: [formId], references: [id])
+  values      Json
+  status      Status   @default(PENDING)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+}
+
+model Workflow {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  module      String
+  conditions  Json
+  actions     Json
+  isActive    Boolean   @default(true)
+  status      Status    @default(ACTIVE)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String?
+  action      String
+  module      String
+  recordId    String?
+  before      Json?
+  after       Json?
+  createdAt   DateTime @default(now())
+}
+
+model FileAsset {
+  id          String    @id @default(cuid())
+  workspaceId String
+  filename    String
+  url         String
+  mimeType    String
+  size        Int
+  module      String?
+  recordId    String?
+  status      Status    @default(ACTIVE)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model Customer {
+  id           String    @id @default(cuid())
+  workspaceId  String
+  name         String
+  contact      String?
+  phone        String?
+  email        String?
+  source       String?
+  level        String?
+  ownerId      String?
+  stage        String    @default("新名單")
+  nextFollowUp DateTime?
+  status       Status    @default(ACTIVE)
+  createdById  String?
+  updatedById  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+}
+
+model Product {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  sku         String
+  barcode     String?
+  category    String?
+  unit        String?
+  price       Int       @default(0)
+  cost        Int       @default(0)
+  safeStock   Int       @default(0)
+  stock       Int       @default(0)
+  supplierId  String?
+  warehouseId String?
+  status      Status    @default(ACTIVE)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model Supplier {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  contact     String?
+  phone       String?
+  status      Status    @default(ACTIVE)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model Warehouse {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  location    String?
+  status      Status    @default(ACTIVE)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model ProductionOrder {
+  id          String    @id @default(cuid())
+  workspaceId String
+  orderNo     String
+  customerName String?
+  productName String
+  quantity    Int       @default(0)
+  plannedStart DateTime?
+  plannedEnd   DateTime?
+  actualEnd    DateTime?
+  ownerId      String?
+  productionStatus String @default("待排程")
+  status      Status    @default(ACTIVE)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model WorkOrder {
+  id          String    @id @default(cuid())
+  workspaceId String
+  title       String
+  productionOrderId String?
+  ownerId     String?
+  workStatus  String    @default("待處理")
+  status      Status    @default(ACTIVE)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model Equipment {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  equipmentNo String
+  category    String?
+  location    String?
+  department  String?
+  ownerId     String?
+  purchaseDate DateTime?
+  warrantyDate DateTime?
+  equipmentStatus String @default("正常")
+  imageUrl    String?
+  note        String?
+  status      Status    @default(ACTIVE)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model MaintenanceRecord {
+  id          String    @id @default(cuid())
+  workspaceId String
+  equipmentId String
+  title       String
+  reason      String?
+  ownerId     String?
+  maintenanceStatus String @default("待處理")
+  status      Status    @default(ACTIVE)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model Employee {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  employeeNo  String
+  department  String?
+  position    String?
+  email       String?
+  phone       String?
+  onboardDate DateTime?
+  managerId   String?
+  status      Status    @default(ACTIVE)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model Attendance {
+  id          String    @id @default(cuid())
+  workspaceId String
+  employeeId  String
+  date        DateTime
+  clockIn     DateTime?
+  clockOut    DateTime?
+  gps         Json?
+  photoUrl    String?
+  status      Status    @default(PENDING)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model LeaveRequest {
+  id          String    @id @default(cuid())
+  workspaceId String
+  employeeId  String
+  leaveType   String
+  startDate   DateTime
+  endDate     DateTime
+  reason      String?
+  status      Status    @default(PENDING)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model Income {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  date          DateTime
+  customerId    String?
+  amount        Int
+  type          String
+  paymentStatus String    @default("待收款")
+  invoiceNo     String?
+  status        Status    @default(ACTIVE)
+  createdById   String?
+  updatedById   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+}
+
+model Expense {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  date          DateTime
+  supplierId    String?
+  amount        Int
+  type          String
+  paymentStatus String    @default("待付款")
+  receiptUrl    String?
+  status        Status    @default(PENDING)
+  createdById   String?
+  updatedById   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+}
+
+model Invoice {
+  id          String    @id @default(cuid())
+  workspaceId String
+  invoiceNo   String
+  amount      Int
+  invoiceDate DateTime
+  status      Status    @default(ACTIVE)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model Project {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  ownerId     String?
+  progress    Int       @default(0)
+  status      Status    @default(ACTIVE)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model Task {
+  id          String    @id @default(cuid())
+  workspaceId String
+  projectId   String?
+  title       String
+  assigneeId  String?
+  priority    String    @default("中")
+  dueDate     DateTime?
+  taskStatus  String    @default("待處理")
+  status      Status    @default(ACTIVE)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model Template {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  industry    String
+  description String?
+  modules     TemplateModule[]
+  status      Status    @default(ACTIVE)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model TemplateModule {
+  id          String    @id @default(cuid())
+  templateId  String
+  template    Template  @relation(fields: [templateId], references: [id])
+  name        String
+  fields      Json
+  workflow    Json?
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model GenericRecord {
+  id          String    @id @default(cuid())
+  workspaceId String
+  module      String
+  title       String
+  data        Json
+  status      Status    @default(ACTIVE)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
