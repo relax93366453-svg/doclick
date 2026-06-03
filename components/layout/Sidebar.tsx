@@ -18,13 +18,13 @@ import {
   Home,
   LayoutDashboard,
   RefreshCcw,
+  Settings,
   ShieldCheck,
   Smartphone,
   UserRoundCog,
   UsersRound,
   WalletCards,
   Wrench,
-  Settings
 } from "lucide-react";
 
 const mainItems = [
@@ -43,6 +43,7 @@ const hrChildren = [
   { key: "overview", label: "人事總覽", href: "/hr", icon: LayoutDashboard },
   { key: "people", label: "人員資料", href: "/hr?tab=people", icon: UsersRound },
   { key: "onboarding", label: "到離職管理", href: "/hr/onboarding", icon: RefreshCcw },
+  { key: "insurance", label: "員工投保", href: "/hr/insurance", icon: ShieldCheck },
   { key: "attendance", label: "考勤打卡", href: "/hr?tab=attendance", icon: ClipboardCheck },
   { key: "schedule", label: "智慧排班", href: "/hr/schedule", icon: CalendarDays },
   { key: "approval", label: "電子簽核", href: "/hr?tab=approval", icon: FileCheck2 },
@@ -70,8 +71,8 @@ export function Sidebar() {
 
   const activeTab =
     pathname === "/hr/onboarding" ? "onboarding" :
-    pathname === "/hr/schedule" ? "schedule" :
-    searchParams.get("tab") ?? "overview";
+      pathname === "/hr/schedule" ? "schedule" :
+        searchParams.get("tab") ?? "overview";
 
   const [hrOpen, setHrOpen] = useState(pathname.startsWith("/hr"));
 
