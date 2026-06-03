@@ -57,6 +57,7 @@ const bottomItems = [
   { key: "admin-office", label: "行政管理", href: "/admin-office", icon: ClipboardList },
   { key: "finance", label: "財務管理", href: "/finance", icon: HandCoins },
   { key: "projects", label: "專案任務", href: "/projects", icon: BarChart3 },
+  { key: "reports-dashboard", label: "數據分析", href: "/reports/dashboard", icon: BarChart3 },
   { key: "permissions", label: "權限設定", href: "/permissions", icon: ShieldCheck },
   { key: "settings", label: "系統設定", href: "/settings", icon: Settings },
 ];
