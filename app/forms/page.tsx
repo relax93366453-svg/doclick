@@ -1,153 +1,186 @@
 "use client";
 
+import Link from "next/link";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
-import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { ClipboardList, Eye, FileText, Plus, Search, Settings2, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
-type GeneratedForm = {
+type AppliedForm = {
   id: string;
-  templateId: string;
-  templateName: string;
-  name: string;
+  title: string;
+  category: string;
   description: string;
   fields: string[];
-  targetModule?: string;
-  createdAt: string;
+  source: string;
+  appliedAt: string;
 };
 
-const moduleLabel: Record<string, string> = {
-  inventory: "進銷存",
-  crm: "銷售客戶",
-  production: "生產管理",
-  equipment: "設備管理",
-  hr: "人事管理",
-  "admin-office": "行政管理",
-  finance: "財務管理",
-  projects: "專案任務"
-};
-function FormsPageContent() {
-  const [forms, setForms] = useState<GeneratedForm[]>([]);
-  const searchParams = useSearchParams();
-  const [keyword, setKeyword] = useState(searchParams.get("keyword") ?? "");
+const defaultForms: AppliedForm[] = [
+  {
+    id: "demo-customer",
+    title: "客戶資料表",
+    category: "銷售",
+    description: "管理客戶基本資料、來源、負責人與聯絡紀錄。",
+    fields: ["客戶名稱", "聯絡人", "電話", "Email", "來源", "負責人", "狀態", "備註"],
+    source: "系統預設",
+    appliedAt: "系統建立"
+  },
+  {
+    id: "demo-order",
+    title: "訂單管理表",
+    category: "銷售",
+    description: "管理訂單編號、客戶、金額、付款與出貨狀態。",
+    fields: ["訂單編號", "客戶名稱", "訂單日期", "金額", "付款狀態", "出貨狀態"],
+    source: "系統預設",
+    appliedAt: "系統建立"
+  }
+];
+
+function getStoredForms(): AppliedForm[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(localStorage.getItem("doclickAppliedForms") || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveStoredForms(forms: AppliedForm[]) {
+  localStorage.setItem("doclickAppliedForms", JSON.stringify(forms));
+  window.dispatchEvent(new Event("doclickFormsUpdated"));
+}
+
+export default function FormsPage() {
+  const [forms, setForms] = useState<AppliedForm[]>([]);
+  const [keyword, setKeyword] = useState("");
+  const [category, setCategory] = useState("全部");
 
   useEffect(() => {
-    const saved = localStorage.getItem("bizflow-generated-forms");
-    if (saved) setForms(JSON.parse(saved));
+    setForms([...getStoredForms(), ...defaultForms]);
+
+    function handleUpdate() {
+      setForms([...getStoredForms(), ...defaultForms]);
+    }
+
+    window.addEventListener("doclickFormsUpdated", handleUpdate);
+    return () => window.removeEventListener("doclickFormsUpdated", handleUpdate);
   }, []);
 
-  const filteredForms = useMemo(() => {
-    if (!keyword.trim()) return forms;
-    return forms.filter((form) =>
-      [form.name, form.description, form.templateName, form.targetModule, ...form.fields]
-        .join(" ")
-        .toLowerCase()
-        .includes(keyword.toLowerCase())
-    );
-  }, [forms, keyword]);
+  const categories = useMemo(() => {
+    return ["全部", ...Array.from(new Set(forms.map((form) => form.category)))];
+  }, [forms]);
 
-  function clearForms() {
-    if (!confirm("確定要清空目前套用產生的表單嗎？")) return;
-    localStorage.removeItem("bizflow-generated-forms");
-    localStorage.removeItem("bizflow-applied-templates");
-    setForms([]);
+  const filteredForms = useMemo(() => {
+    return forms.filter((form) => {
+      const matchKeyword = [form.title, form.description, form.category, form.source].join(" ").includes(keyword);
+      const matchCategory = category === "全部" || form.category === category;
+      return matchKeyword && matchCategory;
+    });
+  }, [forms, keyword, category]);
+
+  function deleteForm(id: string) {
+    const stored = getStoredForms();
+    const next = stored.filter((form) => form.id !== id);
+    saveStoredForms(next);
+    setForms([...next, ...defaultForms]);
   }
 
   return (
     <AppLayout title="表單列表">
       <PageHeader
         title="表單列表"
-        description="這裡會顯示從所有產業範本套用後自動建立的表單。"
+        description="從產業範本庫套用的表單會出現在這裡，可查看欄位、進入表單設計器、設定權限與簽核流程。"
         action={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Link href="/templates" className="btn-secondary">
-              套用範本
+              <Plus className="mr-2 h-4 w-4" />
+              從範本建立
             </Link>
-            <Link href="/form-builder" className="btn-primary">
-              新增表單
+            <Link href="/form-builder/ragic" className="btn-primary">
+              <Settings2 className="mr-2 h-4 w-4" />
+              新增空白表單
             </Link>
           </div>
         }
       />
 
-      <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 md:flex-row md:items-center md:justify-between">
-        <input
-          className="input md:max-w-md"
-          placeholder="搜尋表單、欄位、來源範本或模組..."
-          value={keyword}
-          onChange={(event) => setKeyword(event.target.value)}
-        />
-        <div className="flex gap-2">
-          <Link href="/templates" className="btn-secondary">
-            回範本庫
-          </Link>
-          <button className="btn-secondary" onClick={clearForms}>
-            清空套用資料
-          </button>
+      <div className="card mb-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex min-w-[260px] flex-1 items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2">
+            <Search className="h-4 w-4 text-slate-400" />
+            <input className="w-full bg-transparent text-sm outline-none" placeholder="搜尋表單名稱、分類、來源..." value={keyword} onChange={(event) => setKeyword(event.target.value)} />
+          </div>
+
+          <select className="input max-w-44" value={category} onChange={(event) => setCategory(event.target.value)}>
+            {categories.map((item) => <option key={item}>{item}</option>)}
+          </select>
+
+          <span className="rounded-full bg-brand-50 px-3 py-2 text-sm text-brand-700">
+            共 {filteredForms.length} 張表單
+          </span>
         </div>
       </div>
 
-      {forms.length === 0 ? (
+      {filteredForms.length === 0 ? (
         <div className="card text-center">
-          <h3 className="text-lg font-bold">目前還沒有表單</h3>
-          <p className="mt-2 text-sm text-slate-500">
-            請先到「產業範本庫」按下「套用並查看」，系統就會自動產生表單。
-          </p>
-          <Link href="/templates" className="btn-primary mt-5">
-            前往產業範本庫
-          </Link>
+          <ClipboardList className="mx-auto mb-4 h-12 w-12 text-slate-300" />
+          <h3 className="font-bold">目前沒有表單</h3>
+          <p className="mt-2 text-sm text-slate-500">請先到產業範本庫套用範本。</p>
+          <Link href="/templates" className="btn-primary mt-5 inline-flex">前往產業範本庫</Link>
         </div>
       ) : (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {filteredForms.map((form) => (
-            <div key={form.id} className="card">
-              <div className="mb-3 flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-lg font-bold">{form.name}</h3>
-                  <p className="mt-1 text-sm text-slate-500">{form.description}</p>
-                </div>
-                <span className="rounded-full bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700">
-                  {form.templateName}
-                </span>
-              </div>
+        <div className="grid gap-5 xl:grid-cols-3">
+          {filteredForms.map((form) => {
+            const isStored = !form.id.startsWith("demo-");
 
-              {form.targetModule && (
-                <div className="mb-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                  對應模組：{moduleLabel[form.targetModule] ?? form.targetModule}
-                </div>
-              )}
-
-              <div className="space-y-2">
-                {form.fields.map((field) => (
-                  <div key={field} className="rounded-xl bg-slate-50 px-3 py-2 text-sm">
-                    {field}
+            return (
+              <div key={form.id} className="card">
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-50 text-brand-700">
+                    <FileText className="h-5 w-5" />
                   </div>
-                ))}
-              </div>
+                  <span className="rounded-full bg-slate-50 px-3 py-1 text-xs text-slate-500">{form.category}</span>
+                </div>
 
-              <div className="mt-5 grid grid-cols-3 gap-2">
-                <Link href={`/forms/${encodeURIComponent(form.id)}`} className="btn-primary">
-                  填寫
-                </Link>
-                <Link href={`/forms/${encodeURIComponent(form.id)}/responses`} className="btn-secondary">
-                  回覆
-                </Link>
-                <Link href={form.targetModule ? `/${form.targetModule}` : "/form-builder"} className="btn-secondary">
-                  模組
-                </Link>
+                <h3 className="text-lg font-bold">{form.title}</h3>
+                <p className="mt-2 min-h-12 text-sm leading-6 text-slate-500">{form.description}</p>
+
+                <div className="mt-4 rounded-2xl bg-slate-50 p-4">
+                  <p className="text-xs text-slate-400">欄位數</p>
+                  <p className="mt-1 text-xl font-bold">{form.fields.length} 個欄位</p>
+                  <p className="mt-2 text-xs text-slate-400">來源：{form.source}</p>
+                  <p className="text-xs text-slate-400">套用時間：{form.appliedAt}</p>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {form.fields.slice(0, 6).map((field) => (
+                    <span key={field} className="rounded-full bg-brand-50 px-3 py-1 text-xs text-brand-700">{field}</span>
+                  ))}
+                  {form.fields.length > 6 && <span className="rounded-full bg-slate-50 px-3 py-1 text-xs text-slate-500">+{form.fields.length - 6}</span>}
+                </div>
+
+                <div className="mt-5 grid grid-cols-2 gap-2">
+                  <Link href={`/forms/${form.id}`} className="btn-primary justify-center">
+                    <Eye className="mr-2 h-4 w-4" />
+                    查看
+                  </Link>
+                  <Link href="/form-builder/ragic" className="btn-secondary justify-center">設計</Link>
+                  <Link href="/permissions/advanced" className="btn-secondary justify-center">權限</Link>
+                  <Link href="/hr/approval/advanced" className="btn-secondary justify-center">簽核</Link>
+                </div>
+
+                {isStored && (
+                  <button className="mt-3 flex w-full items-center justify-center rounded-xl px-3 py-2 text-sm text-red-500 hover:bg-red-50" onClick={() => deleteForm(form.id)}>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    移除套用表單
+                  </button>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </AppLayout>
-  );
-}
-export default function FormsPage() {
-  return (
-    <Suspense fallback={<div className="p-6">載入中...</div>}>
-      <FormsPageContent />
-    </Suspense>
   );
 }

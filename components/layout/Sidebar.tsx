@@ -4,10 +4,13 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  ReceiptText,
+  ArrowRightLeft,
   BarChart3,
   Boxes,
   Building2,
   CalendarDays,
+  CalendarCheck,
   ChevronDown,
   ClipboardCheck,
   ClipboardList,
@@ -33,7 +36,8 @@ const mainItems = [
   { key: "templates", label: "產業範本庫", href: "/templates", icon: Building2 },
   { key: "forms", label: "表單列表", href: "/forms", icon: ClipboardList },
   { key: "form-builder", label: "表單設計器", href: "/form-builder", icon: FileText },
-  { key: "inventory", label: "進銷存", href: "/inventory", icon: Boxes },
+  { key: "form-relations", label: "表單關聯", href: "/form-relations", icon: ArrowRightLeft },
+  { key: "inventory", label: "進銷存", href: "/inventory/order-shipping", icon: Boxes },
   { key: "crm", label: "銷售客戶", href: "/crm", icon: UsersRound },
   { key: "production", label: "生產管理", href: "/production", icon: Factory },
   { key: "equipment", label: "設備管理", href: "/equipment", icon: Wrench },
@@ -50,12 +54,14 @@ const hrChildren = [
   { key: "payroll", label: "薪資稅務", href: "/hr?tab=payroll", icon: WalletCards },
   { key: "reports", label: "數據報表", href: "/hr?tab=reports", icon: BarChart3 },
   { key: "security", label: "資安法規", href: "/hr?tab=security", icon: ShieldCheck },
-  { key: "mobile", label: "員工自助 App", href: "/hr?tab=mobile", icon: Smartphone },
+  { key: "mobile", label: "員工自助 App", href: "/mobile-app", icon: Smartphone },
 ];
 
+
 const bottomItems = [
+  { key: "calendar", label: "整合行事曆", href: "/calendar-sync", icon: CalendarCheck },
   { key: "admin-office", label: "行政管理", href: "/admin-office", icon: ClipboardList },
-  { key: "finance", label: "財務管理", href: "/finance", icon: HandCoins },
+  { key: "finance", label: "財務管理", href: "/finance/cashflow", icon: HandCoins },
   { key: "projects", label: "專案任務", href: "/projects", icon: BarChart3 },
   { key: "reports-dashboard", label: "數據分析", href: "/reports/dashboard", icon: BarChart3 },
   { key: "permissions", label: "權限設定", href: "/permissions", icon: ShieldCheck },
@@ -84,7 +90,7 @@ export function Sidebar() {
   return (
     <aside className="fixed inset-y-0 left-0 z-20 w-72 overflow-y-auto border-r border-slate-200 bg-white p-4">
       <Link href="/" className="mb-5 block rounded-2xl bg-brand-600 p-4 text-white hover:bg-brand-700">
-        <p className="text-xs opacity-80">BizFlow</p>
+        <p className="text-xs opacity-80">DOCLICK.TW</p>
         <h1 className="text-lg font-bold">多產業管理系統</h1>
         <div className="mt-3 flex items-center gap-2 text-xs opacity-90">
           <Home className="h-3.5 w-3.5" />
