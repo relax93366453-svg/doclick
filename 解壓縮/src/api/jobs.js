@@ -7,11 +7,19 @@ export async function fetchPublishedJobs() {
     const response = await fetch(endpoint);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    // The Apps Script may return either an array or an object with a `jobs` field.
-    return Array.isArray(data) ? data : data.jobs || [];
+    const jobsArray = Array.isArray(data) ? data : data.jobs || [];
+    // Normalize job objects to UI shape
+    return jobsArray.map(job => ({
+      id: job.id,
+      title: job.title,
+      company: job.company,
+      location: `${job.city || ''}${job.district || ''}`,
+      rate: job.salaryMin != null && job.salaryMax != null ? `${job.salaryMin}～${job.salaryMax}` : job.rate,
+      type: job.type,
+      status: job.status,
+    }));
   } catch (error) {
     console.error('Failed to fetch published jobs:', error);
-    // Return empty array so UI can handle gracefully.
     return [];
   }
 }

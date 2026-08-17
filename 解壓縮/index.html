@@ -1,11 +1,29 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-TW">
 
 <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/svg+xml" href="/doclick/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>愜易居營運模組規劃</title>
+    <title>愜易居 – 靈活就業平臺 x 人才養育培訓</title>
+    <meta name="description" content="愜易居提供靈活就業機會與人才培訓，快速媒合求職者與雇主，開啟新的職涯可能。" />
+    <!-- GitHub Pages SPA redirect receiver -->
+    <script>
+      (function(l) {
+        if (l.search[1] === '/') {
+          var decoded = l.search.slice(1).split('&').map(function(s) {
+            return s.replace(/~and~/g, '&');
+          });
+          window.history.replaceState(
+            null, null,
+            l.pathname.slice(0, -1) +
+            (decoded[0] && decoded[0][0] === '/' ? decoded[0] : '') +
+            (decoded[1] ? '?' + decoded[1] : '') +
+            l.hash
+          );
+        }
+      }(window.location));
+    </script>
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Google Fonts -->
@@ -18,4 +36,4 @@
     <script type="module" src="/src/main.jsx"></script>
 </body>
 
-</html>
+</html>

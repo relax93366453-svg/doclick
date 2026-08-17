@@ -1,5 +1,7 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
+import MemberNavbar from '../components/MemberNavbar';
+
 import { TALENT_LEVELS } from '../constants/data';
 
 const TalentPage = ({ onBack }) => {
@@ -12,16 +14,16 @@ const TalentPage = ({ onBack }) => {
                         <div className="font-bold text-xl tracking-wider mr-2 text-talent-900">愜易居</div>
                         <div className="text-xs bg-talent-100 text-talent-800 px-2 py-1 rounded">靈活就業平臺 x 人才養育培訓</div>
                     </div>
-                    <div className="hidden md:flex space-x-8 text-sm text-gray-600 items-center">
-                        <Link to="/jobs" className="hover:text-talent-600 font-bold">找工作</Link>
-                        <a href="#vision" className="hover:text-talent-600">願景</a>
-                        <a href="#levels" className="hover:text-talent-600">分級制度</a>
-                        <a href="#benefits" className="hover:text-talent-600">地圖卡福利</a>
-                        <a href="#faq" className="hover:text-talent-600">常見問題</a>
-                    </div>
-                    <Link to="/register" className="bg-talent-600 text-white px-4 py-2 rounded-full text-sm font-bold hover:bg-talent-700 shadow-md shadow-talent-500/30">
-                        立即加入
-                    </Link>
+                     <div className="hidden md:flex space-x-8 text-sm text-gray-600 items-center">
+                         <Link to="/jobs" className="hover:text-talent-600 font-bold">找工作</Link>
+                         <a href="#vision" className="hover:text-talent-600">願景</a>
+                         <a href="#levels" className="hover:text-talent-600">分級制度</a>
+                         <a href="#benefits" className="hover:text-talent-600">地圖卡福利</a>
+                         <a href="#faq" className="hover:text-talent-600">常見問題</a>
+                     </div>
+
+                     {/* Right side – unified member navbar */}
+                     <MemberNavbar />
                 </div>
             </nav>
 

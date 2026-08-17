@@ -1,4 +1,14 @@
 import React from 'react';
+import { useEffect } from 'react';
+
+// Utility to ensure an array for mapping (handles undefined/string)
+const safeArray = (value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    return value.split(/\r?\n|、|，|,/).map(item => item.trim()).filter(Boolean);
+  }
+  return [];
+};
 
 const JobDetailModal = ({ job, onClose, onApply }) => {
     if (!job) return null;
@@ -91,11 +101,11 @@ const JobDetailModal = ({ job, onClose, onApply }) => {
                             <div>
                                 <h4 className="font-bold text-gray-900 mb-2 border-l-4 border-talent-500 pl-2">福利制度</h4>
                                 <div className="flex gap-2 flex-wrap">
-                                    {job.tags.map(tag => (
-                                        <span key={tag} className="px-2 py-1 bg-talent-50 text-talent-700 text-xs rounded">
-                                            {tag}
-                                        </span>
-                                    ))}
+                                    {safeArray(job?.tags).map(tag => (
+                                            <span key={tag} className="px-2 py-1 bg-talent-50 text-talent-700 text-xs rounded">
+                                              {tag}
+                                            </span>
+                                          ))}
                                     <span className="px-2 py-1 bg-green-50 text-green-700 text-xs rounded">勞健保</span>
                                     <span className="px-2 py-1 bg-green-50 text-green-700 text-xs rounded">加班費</span>
                                 </div>
