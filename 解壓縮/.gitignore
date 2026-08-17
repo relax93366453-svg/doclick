@@ -22,3 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.vite
+.env
+.env.local
+.env.*.local
+*.zip
+restore-original-talent-page/
+src/App.before_restore_talent.jsx
+RESTORE_TALENT_V2.bat
+talent-api/
