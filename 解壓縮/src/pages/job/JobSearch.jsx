@@ -1,17 +1,15 @@
-import React, { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { MOCK_JOBS } from '../../constants/jobs';
+import React, { useState, useEffect, useRef } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import JobDetailModal from '../../components/JobDetailModal';
+import ApplicationFlow from '../../components/jobs-platform/ApplicationFlow';
 import SearchBar from '../../components/jobs-platform/SearchBar';
 import SectionTitle from '../../components/jobs-platform/SectionTitle';
 import WorkEntryCard from '../../components/jobs-platform/WorkEntryCard';
-import {
-  urgentJobs,
-  shortTermJobs,
-  tasks,
-  popularCategories,
-} from '../../components/jobs-platform/mockData';
-import { Link } from 'react-router-dom';
+import { popularCategories } from '../../components/jobs-platform/mockData';
+import { fetchPublishedJobs } from '../../api/jobs';
+import { loadApplicantProfile } from '../../helpers/applicantProfile';
+import { isApplicantLoggedIn } from '../../helpers/authHelper';
+import MemberNavbar from '../../components/MemberNavbar';
 
 // ------------------------------------------------------------------
 // Data for static sections (news, banners, keywords, quick entries, etc.)
@@ -134,18 +132,71 @@ const SmallCard = ({ job }) => (
 );
 
 const JobSearch = () => {
+  const [apiJobs, setApiJobs] = useState([]);
+  const [apiError, setApiError] = useState(false);
+
+  // Auth dropdown – handled by MemberNavbar component
+
+  // Fetch published jobs on mount
+  useEffect(() => {
+    fetchPublishedJobs()
+      .then(jobs => {
+        // Keep only published status
+        const published = jobs.filter(job => {
+          const status = job.status?.toLowerCase();
+          return status === 'published' || status === '已上架';
+        });
+        setApiJobs(published);
+      })
+      .catch(() => setApiError(true));
+  }, []);
+
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [filterType, setFilterType] = useState('all');
   const [selectedRegions, setSelectedRegions] = useState([]); // array of city/district strings
   const [keyword, setKeyword] = useState('');
   const [selectedJob, setSelectedJob] = useState(null);
   const [filterOpen, setFilterOpen] = useState(true);
+  // state for opening apply flow modal
+  const [applyJob, setApplyJob] = useState(null);
+
+  // Auto-open job modal AND apply flow when returning from login with ?openJob=<id>
+  useEffect(() => {
+    const openJobId = searchParams.get('openJob');
+    if (openJobId && apiJobs.length > 0) {
+      const job = apiJobs.find(j => String(j.id) === String(openJobId));
+      if (job) {
+        setSelectedJob(job);
+        // If user is now logged in (returned from login page), go straight to apply flow
+        if (isApplicantLoggedIn()) {
+          setApplyJob(job);
+        }
+      }
+    }
+  }, [apiJobs, searchParams]);
+
+  // handleApply: gate on session token, NOT on whether a local profile exists
+  const handleApply = job => {
+    if (!isApplicantLoggedIn()) {
+      // Not logged in – redirect to login, then return to this job
+      navigate(`/login?nextJob=${job.id}`);
+    } else {
+      // Logged in – open application flow (ApplicationFlow loads stored profile internally)
+      setApplyJob(job);
+    }
+  };
+
+  // close apply modal
+  const closeApply = () => {
+    setApplyJob(null);
+  };
   const [activeInfoTab, setActiveInfoTab] = useState(newsTabs[0].id);
   const [activeRecommendTab, setActiveRecommendTab] = useState('dispatch');
 
   const jobListRef = useRef(null);
 
-  const filteredJobs = MOCK_JOBS.filter(job => {
+  const filteredJobs = apiJobs.filter(job => {
     const safeTitle = typeof job.title === 'string' ? job.title : '';
     const safeLocation = typeof job.location === 'string' ? job.location : '';
     const safeType = typeof job.type === 'string' ? job.type : '';
@@ -163,10 +214,11 @@ const JobSearch = () => {
     return ok;
   });
 
-  const handleApply = job => {
-    alert(`已成功應徵職缺：${job.title}`);
-    setSelectedJob(null);
-  };
+
+
+
+
+
 
   const handleSearch = ({ keyword: kw = '', locations = [], type: tp = '' }) => {
     setKeyword(kw);
@@ -195,25 +247,31 @@ const JobSearch = () => {
   const getRecommendJobs = () => {
     switch (activeRecommendTab) {
       case 'dispatch':
-        return urgentJobs;
+        // 長期職缺
+        return apiJobs.filter(job => job.type === '長期');
       case 'today':
-        return shortTermJobs;
+        // 短期職缺
+        return apiJobs.filter(job => job.type === '短期');
       case 'urgent':
-        return urgentJobs;
+        // 同 dispatch 使用長期職缺
+        return apiJobs.filter(job => job.type === '長期');
       case 'stable':
-        return MOCK_JOBS.filter(job => job.type === '長期');
+        return apiJobs.filter(job => job.type === '長期');
       case 'noexp':
-        return MOCK_JOBS.filter(job => job.title && job.title.includes('無經驗')).slice(0, 8);
+        return apiJobs.filter(job => job.title && job.title.includes('無經驗')).slice(0, 8);
       case 'weekly':
-        return MOCK_JOBS.filter(job => job.rate && job.rate >= 400).slice(0, 8);
+        return apiJobs.filter(job => job.rate && Number(job.rate) >= 400).slice(0, 8);
       case 'fulltime':
-        return MOCK_JOBS.filter(job => job.type === '短期').slice(0, 8);
+        return apiJobs.filter(job => job.type === '短期').slice(0, 8);
       case 'task':
-        return tasks;
+        // No task mock data; return empty array
+        return [];
       default:
         return filteredJobs.slice(0, 8);
     }
   };
+
+
 
   const activeNews = newsTabs.find(tab => tab.id === activeInfoTab);
 
@@ -222,22 +280,15 @@ const JobSearch = () => {
       <style>{`\n        .fixed.inset-0.bg-black.bg-opacity-50 { z-index: 9999 !important; }\n        .bg-white.rounded-lg.w-11\\/12, .bg-white.rounded-lg.w-3\\/4, .bg-white.rounded-lg.max-w-2xl { z-index: 10000 !important; }\n        .activityBannerContainer { z-index: 0 !important; }\n      `}</style>
 
       <JobDetailModal job={selectedJob} onClose={() => setSelectedJob(null)} onApply={handleApply} />
+      {applyJob && <ApplicationFlow job={applyJob} onClose={closeApply} />}
 
-      <nav className="bg-white shadow-sm sticky top-0 z-10">
+      <nav className="bg-white shadow-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-3 flex justify-between items-center">
           <div className="flex items-center cursor-pointer" onClick={() => navigate('/talent')}>
             <span className="font-bold text-xl text-talent-600 tracking-wider">愜易居</span>
             <span className="text-xs text-gray-400 ml-2 border-l pl-2">Job Seeker</span>
           </div>
-          <div className="flex items-center gap-4">
-            <button className="text-gray-500 hover:text-talent-600 relative">
-              <i className="fas fa-bell" />
-              <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full" />
-            </button>
-            <div className="w-8 h-8 bg-talent-100 rounded-full flex items-center justify-center text-talent-700 font-bold border border-talent-200">
-              A
-            </div>
-          </div>
+          <MemberNavbar />
         </div>
       </nav>
 
@@ -377,23 +428,7 @@ const JobSearch = () => {
                 ))}
               </div>
             </div>
-            <div className="mb-6">
-              <h4 className="text-xs font-bold text-gray-400 uppercase mb-3">地區</h4>
-              <div className="space-y-2">
-                {['新北市', '台北市', '桃園市'].map(reg => (
-                  <label key={reg} className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="region"
-                      checked={selectedRegions.includes(reg)}
-                      onChange={() => setSelectedRegions([reg])}
-                      className="text-talent-600"
-                    />
-                    <span className="text-sm text-gray-600">{reg}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
+
           </div>
         </aside>
 
@@ -429,48 +464,21 @@ const JobSearch = () => {
                   ))}
                 </div>
               </div>
-              <div className="mb-4">
-                <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">地區</h4>
-                <div className="space-y-2">
-                  {['新北市', '台北市', '桃園市'].map(reg => (
-                    <label key={reg} className="flex items-center space-x-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="regionMobile"
-                        checked={selectedRegions.includes(reg)}
-                        onChange={() => setSelectedRegions([reg])}
-                        className="text-talent-600"
-                      />
-                      <span className="text-sm text-gray-600">{reg}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
+
             </div>
           )}
         </div>
 
         <main className="flex-grow" ref={jobListRef}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-            <div className="flex flex-col gap-2">
-              {urgentJobs.slice(0, 2).map(job => (
-                <SmallCard key={job.id} job={job} />
-              ))}
-            </div>
-            <div className="flex flex-col gap-2">
-              {shortTermJobs.slice(0, 2).map(job => (
-                <SmallCard key={job.id} job={job} />
-              ))}
-            </div>
-            <div className="flex flex-col gap-2">
-              {tasks.slice(0, 2).map(job => (
-                <SmallCard key={job.id} job={job} />
-              ))}
-            </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {apiJobs.slice(0, 6).map(job => (
+              <SmallCard key={job.id} job={job} />
+            ))}
           </div>
 
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-4 mt-8">
             <h2 className="text-xl font-bold text-gray-800">最新職缺 ({filteredJobs.length})</h2>
+          {apiError && <p className="text-red-600">目前無法讀取職缺</p>}
             <select className="border rounded p-1 text-sm">
               <option>最新上架</option>
               <option>薪資高到低</option>
