@@ -1,535 +1,586 @@
+// src/pages/job/JobSearch.jsx
+// 「找工作」頁 — 重新設計版
+// ・桌機：頂部快速篩選 chips + 左側固定篩選面板 + 右側職缺列表
+// ・手機：快速篩選橫向滑動 + 「篩選」按鈕展開 drawer
+// ・不修改 API、登入、應徵流程、JobPosts 資料來源
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import JobDetailModal from '../../components/JobDetailModal';
 import ApplicationFlow from '../../components/jobs-platform/ApplicationFlow';
 import SearchBar from '../../components/jobs-platform/SearchBar';
-import SectionTitle from '../../components/jobs-platform/SectionTitle';
-import WorkEntryCard from '../../components/jobs-platform/WorkEntryCard';
-import { popularCategories } from '../../components/jobs-platform/mockData';
 import { fetchPublishedJobs } from '../../api/jobs';
-import { loadApplicantProfile } from '../../helpers/applicantProfile';
 import { isApplicantLoggedIn } from '../../helpers/authHelper';
 import MemberNavbar from '../../components/MemberNavbar';
 
-// ------------------------------------------------------------------
-// Data for static sections (news, banners, keywords, quick entries, etc.)
-// ------------------------------------------------------------------
-const newsTabs = [
-  {
-    id: 'dispatch',
-    label: '派遣快訊',
-    title: '最新派遣職缺與資訊',
-    description: '最新派遣職缺、急徵班次、合作企業消息與報名提醒',
-    items: [
-      '本週新增桃園地區派遣職缺',
-      '急徵短期班次即將開放',
-      '合作企業派遣需求說明',
-    ],
-  },
-  {
-    id: 'newcomer',
-    label: '新人報到',
-    title: '新人報到流程與指南',
-    description: '報到流程、履歷填寫、面試準備與上班注意事項',
-    items: [],
-  },
-  {
-    id: 'schedule',
-    label: '排班資訊',
-    title: '排班與班次資訊',
-    description: '今日可報班、本週班次、短期支援與臨時缺額',
-    items: [],
-  },
-  {
-    id: 'career',
-    label: '職涯成長',
-    title: '職涯成長與福利',
-    description: '累積工時、薪級制度、福利補助與正職轉換機會',
-    items: [],
-  },
+// ── 靜態資料 ──────────────────────────────────────────────────────────────────
+
+// 頂部快速篩選 chips
+const QUICK_CHIPS = [
+  { id: 'all',      label: '全部職缺',   icon: 'fas fa-th' },
+  { id: 'dispatch', label: '派遣職缺',   icon: 'fas fa-briefcase' },
+  { id: 'today',    label: '今日可報班', icon: 'fas fa-calendar-day' },
+  { id: 'urgent',   label: '急徵職缺',   icon: 'fas fa-bolt' },
+  { id: 'stable',   label: '長期穩定',   icon: 'fas fa-clock' },
+  { id: 'noexp',    label: '無經驗可',   icon: 'fas fa-star' },
+  { id: 'fulltime', label: '正職機會',   icon: 'fas fa-id-badge' },
 ];
 
-const activityBanners = [
-  {
-    title: '本週急徵派遣人才',
-    description: '桃園、台北、新北多項職缺開放報名',
-    buttonText: '查看派遣職缺',
-    link: '/jobs',
-    image: '/images/jobs/resume-banner.jpg',
-  },
-  {
-    title: '企業快速找人才',
-    description: '派遣、臨時班次與專案支援一次媒合',
-    buttonText: '我要找人才',
-    link: '/business',
-    image: '/images/jobs/business-banner.jpg',
-  },
+// 左側篩選：工作性質
+const JOB_NATURE_OPTIONS = ['正職', '派遣', '短期', '長期', '排班'];
+
+// 左側篩選：工作地區
+const REGION_OPTIONS = ['台北市', '新北市', '桃園市'];
+
+// 左側篩選：薪資
+const SALARY_OPTIONS = [
+  { id: 'all',   label: '不限',          min: 0 },
+  { id: '200',   label: '200/hr 以上',   min: 200 },
+  { id: '220',   label: '220/hr 以上',   min: 220 },
+  { id: '250',   label: '250/hr 以上',   min: 250 },
 ];
 
-const hotKeywords = [
-  '無經驗可',
-  '立即上班',
-  '彈性排班',
-  '短期派遣',
-  '長期派遣',
-  '日班',
-  '夜班',
-  '週領',
-  '桃園職缺',
+// 熱門工作分類（移到列表下方）
+const HOT_CATEGORIES = [
+  { id: 'admin',    label: '行政助理',   icon: 'fas fa-file-alt' },
+  { id: 'retail',   label: '門市人員',   icon: 'fas fa-store' },
+  { id: 'cs',       label: '客服',       icon: 'fas fa-headset' },
+  { id: 'operator', label: '作業員',     icon: 'fas fa-cogs' },
+  { id: 'logistics',label: '倉儲物流',   icon: 'fas fa-boxes' },
+  { id: 'event',    label: '活動支援',   icon: 'fas fa-hands-helping' },
 ];
 
-const quickEntries = [
-  {
-    id: 'dispatch',
-    title: '找派遣工作',
-    icon: 'fas fa-briefcase',
-    description: '依地區與職類快速媒合',
-  },
-  {
-    id: 'today',
-    title: '今日可報班',
-    icon: 'fas fa-calendar-day',
-    description: '查看今天與近期可上班班次',
-  },
-  {
-    id: 'stable',
-    title: '長期穩定派遣',
-    icon: 'fas fa-clock',
-    description: '尋找固定班別與穩定工時',
-  },
-  {
-    id: 'business',
-    title: '企業找人才',
-    icon: 'fas fa-building',
-    description: '快速媒合合適派遣人員',
-    link: '/business',
-  },
-];
+const JOBS_PER_PAGE = 10;
 
-const recommendTabs = [
-  { id: 'dispatch', label: '派遣推薦' },
-  { id: 'today', label: '今日可報班' },
-  { id: 'urgent', label: '急徵職缺' },
-  { id: 'stable', label: '長期穩定' },
-  { id: 'noexp', label: '無經驗可' },
-  { id: 'weekly', label: '週領職缺' },
-  { id: 'fulltime', label: '正職機會' },
-  { id: 'task', label: '任務接案' },
-];
+// ── 排序函式 ─────────────────────────────────────────────────────────────────
+function sortJobs(jobs, sortBy) {
+  const copy = [...jobs];
+  if (sortBy === 'salary_desc') {
+    copy.sort((a, b) => Number(b.rate || 0) - Number(a.rate || 0));
+  } else {
+    // 最新上架：依 id 降序（id 越大越新，或依 createdAt）
+    copy.sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
+  }
+  return copy;
+}
 
-// SmallCard component – used in featured area
-const SmallCard = ({ job }) => (
-  <div className="border rounded-lg p-3 bg-white shadow-sm flex flex-col justify-between h-full">
-    <div>
-      <h4 className="font-bold text-sm mb-1">{job.title}</h4>
-      <p className="text-xs text-gray-500">{job.location}</p>
-      <span className="text-talent-600 font-medium text-sm">${job.rate}/hr</span>
+// ── 職缺卡片 ─────────────────────────────────────────────────────────────────
+const JobCard = ({ job, onClick, onApply }) => {
+  const tags = [];
+  if (job.type)     tags.push(job.type);
+  if (job.shift)    tags.push(job.shift);
+  if (job.location) tags.push(job.location);
+
+  return (
+    <div
+      className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:border-talent-300 transition-all cursor-pointer p-5 flex flex-col sm:flex-row sm:items-center gap-4"
+      onClick={onClick}
+    >
+      {/* Left: info */}
+      <div className="flex-1 min-w-0">
+        <h3 className="font-bold text-gray-800 text-base leading-snug truncate">{job.title}</h3>
+        <p className="text-sm text-gray-500 mt-0.5 truncate">
+          {[job.company, job.location].filter(Boolean).join(' · ')}
+        </p>
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {tags.map((t, i) => (
+            <span key={i} className="text-xs bg-talent-50 text-talent-700 border border-talent-100 px-2 py-0.5 rounded-full">
+              {t}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Right: salary + action */}
+      <div className="flex sm:flex-col items-center sm:items-end gap-3 flex-shrink-0">
+        {job.rate && (
+          <span className="text-talent-600 font-bold text-base whitespace-nowrap">
+            NT${job.rate}/hr
+          </span>
+        )}
+        <button
+          className="text-xs font-medium border border-talent-500 text-talent-600 px-3 py-1.5 rounded-lg hover:bg-talent-50 transition-colors whitespace-nowrap"
+          onClick={e => { e.stopPropagation(); onApply(job); }}
+        >
+          立即應徵
+        </button>
+      </div>
     </div>
-    <div className="mt-1">
-      <span className="text-xs bg-talent-100 text-talent-600 px-2 py-0.5 rounded">{job.type}</span>
-    </div>
-  </div>
-);
+  );
+};
 
+// ── 篩選面板（左側 / Drawer 共用） ───────────────────────────────────────────
+const FilterPanel = ({ nature, setNature, regions, setRegions, salaryMin, setSalaryMin, onClear }) => {
+  const toggleRegion = r =>
+    setRegions(prev => prev.includes(r) ? prev.filter(x => x !== r) : [...prev, r]);
+
+  return (
+    <div className="space-y-6">
+      {/* 清除 */}
+      <div className="flex justify-between items-center">
+        <span className="font-bold text-gray-700 text-sm">篩選條件</span>
+        <button onClick={onClear} className="text-xs text-talent-500 hover:underline">清除全部</button>
+      </div>
+
+      {/* 工作性質 */}
+      <div>
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">工作性質</p>
+        <div className="space-y-1.5">
+          {JOB_NATURE_OPTIONS.map(n => (
+            <label key={n} className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="radio"
+                name="nature"
+                checked={nature === n}
+                onChange={() => setNature(n)}
+                className="accent-orange-500"
+              />
+              <span className="text-sm text-gray-600">{n}</span>
+            </label>
+          ))}
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="radio"
+              name="nature"
+              checked={nature === ''}
+              onChange={() => setNature('')}
+              className="accent-orange-500"
+            />
+            <span className="text-sm text-gray-600">不限</span>
+          </label>
+        </div>
+      </div>
+
+      {/* 工作地區 */}
+      <div>
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">工作地區</p>
+        <div className="space-y-1.5">
+          {REGION_OPTIONS.map(r => (
+            <label key={r} className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={regions.includes(r)}
+                onChange={() => toggleRegion(r)}
+                className="accent-orange-500"
+              />
+              <span className="text-sm text-gray-600">{r}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* 薪資 */}
+      <div>
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">薪資</p>
+        <div className="space-y-1.5">
+          {SALARY_OPTIONS.map(opt => (
+            <label key={opt.id} className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="radio"
+                name="salary"
+                checked={salaryMin === opt.min}
+                onChange={() => setSalaryMin(opt.min)}
+                className="accent-orange-500"
+              />
+              <span className="text-sm text-gray-600">{opt.label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ═════════════════════════════════════════════════════════════════════════════
 const JobSearch = () => {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // ── API state ──
   const [apiJobs, setApiJobs] = useState([]);
   const [apiError, setApiError] = useState(false);
+  const [apiLoading, setApiLoading] = useState(true);
 
-  // Auth dropdown – handled by MemberNavbar component
+  // ── Filter state ──
+  const [activeChip, setActiveChip]     = useState('all');
+  const [nature, setNature]             = useState('');
+  const [regions, setRegions]           = useState([]);
+  const [salaryMin, setSalaryMin]       = useState(0);
+  const [keyword, setKeyword]           = useState('');
+  const [sortBy, setSortBy]             = useState('latest');
+  const [page, setPage]                 = useState(1);
 
-  // Fetch published jobs on mount
+  // ── Modal/Apply state ──
+  const [selectedJob, setSelectedJob]   = useState(null);
+  const [applyJob, setApplyJob]         = useState(null);
+
+  // ── Mobile drawer ──
+  const [drawerOpen, setDrawerOpen]     = useState(false);
+
+  const jobListRef = useRef(null);
+
+  // ── Fetch jobs ──
   useEffect(() => {
     fetchPublishedJobs()
       .then(jobs => {
-        // Keep only published status
-        const published = jobs.filter(job => {
-          const status = job.status?.toLowerCase();
-          return status === 'published' || status === '已上架';
+        // 保留所有已上架 / published / active 職缺（不依賴職稱判斷類型）
+        const published = jobs.filter(j => {
+          const s = (j.status || '').toLowerCase().trim();
+          return (
+            s === 'published' ||
+            s === '已上架' ||
+            s === 'active' ||
+            s === '上架中'
+          );
         });
         setApiJobs(published);
       })
-      .catch(() => setApiError(true));
+      .catch(() => setApiError(true))
+      .finally(() => setApiLoading(false));
   }, []);
 
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [filterType, setFilterType] = useState('all');
-  const [selectedRegions, setSelectedRegions] = useState([]); // array of city/district strings
-  const [keyword, setKeyword] = useState('');
-  const [selectedJob, setSelectedJob] = useState(null);
-  const [filterOpen, setFilterOpen] = useState(true);
-  // state for opening apply flow modal
-  const [applyJob, setApplyJob] = useState(null);
-
-  // Auto-open job modal AND apply flow when returning from login with ?openJob=<id>
+  // ── Auto-open from ?openJob= ──
   useEffect(() => {
     const openJobId = searchParams.get('openJob');
     if (openJobId && apiJobs.length > 0) {
       const job = apiJobs.find(j => String(j.id) === String(openJobId));
       if (job) {
         setSelectedJob(job);
-        // If user is now logged in (returned from login page), go straight to apply flow
-        if (isApplicantLoggedIn()) {
-          setApplyJob(job);
-        }
+        if (isApplicantLoggedIn()) setApplyJob(job);
       }
     }
   }, [apiJobs, searchParams]);
 
-  // handleApply: gate on session token, NOT on whether a local profile exists
+  // ── Apply handler ──
   const handleApply = job => {
     if (!isApplicantLoggedIn()) {
-      // Not logged in – redirect to login, then return to this job
       navigate(`/login?nextJob=${job.id}`);
     } else {
-      // Logged in – open application flow (ApplicationFlow loads stored profile internally)
       setApplyJob(job);
     }
   };
 
-  // close apply modal
-  const closeApply = () => {
-    setApplyJob(null);
-  };
-  const [activeInfoTab, setActiveInfoTab] = useState(newsTabs[0].id);
-  const [activeRecommendTab, setActiveRecommendTab] = useState('dispatch');
-
-  const jobListRef = useRef(null);
-
-  const filteredJobs = apiJobs.filter(job => {
-    const safeTitle = typeof job.title === 'string' ? job.title : '';
-    const safeLocation = typeof job.location === 'string' ? job.location : '';
-    const safeType = typeof job.type === 'string' ? job.type : '';
-    let ok = true;
-    if (filterType !== 'all') {
-      ok = ok && safeType === filterType;
-    }
-    if (keyword.trim()) {
-      ok = ok && safeTitle.includes(keyword.trim());
-    }
-    if (Array.isArray(selectedRegions) && selectedRegions.length > 0) {
-      const matchesRegion = selectedRegions.some(reg => safeLocation.includes(reg));
-      ok = ok && matchesRegion;
-    }
-    return ok;
-  });
-
-
-
-
-
-
-
-  const handleSearch = ({ keyword: kw = '', locations = [], type: tp = '' }) => {
+  // ── Search bar handler ──
+  const handleSearch = ({ keyword: kw = '' }) => {
     setKeyword(kw);
-    if (tp) {
-      const typeMap = {
-        fulltime: '短期',
-        dispatch: '長期',
-        temp: '臨時班',
-        task: '任務',
-      };
-      setFilterType(typeMap[tp] || 'all');
-    }
-    const safeLocations = Array.isArray(locations) ? locations : [];
-    setSelectedRegions(safeLocations);
+    setPage(1);
     jobListRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const renderJobCards = jobs => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-      {jobs.map(job => (
-        <WorkEntryCard key={job.id} title={job.title} onClick={() => setSelectedJob(job)} />
-      ))}
-    </div>
-  );
-
-  const getRecommendJobs = () => {
-    switch (activeRecommendTab) {
-      case 'dispatch':
-        // 長期職缺
-        return apiJobs.filter(job => job.type === '長期');
-      case 'today':
-        // 短期職缺
-        return apiJobs.filter(job => job.type === '短期');
-      case 'urgent':
-        // 同 dispatch 使用長期職缺
-        return apiJobs.filter(job => job.type === '長期');
-      case 'stable':
-        return apiJobs.filter(job => job.type === '長期');
-      case 'noexp':
-        return apiJobs.filter(job => job.title && job.title.includes('無經驗')).slice(0, 8);
-      case 'weekly':
-        return apiJobs.filter(job => job.rate && Number(job.rate) >= 400).slice(0, 8);
-      case 'fulltime':
-        return apiJobs.filter(job => job.type === '短期').slice(0, 8);
-      case 'task':
-        // No task mock data; return empty array
-        return [];
-      default:
-        return filteredJobs.slice(0, 8);
-    }
+  // ── Chip click ──
+  // chip は activeChip だけを変える。左側の nature 篩選とは独立。
+  // 切り替え時は nature をリセットして二重フィルタにならないようにする。
+  const handleChip = chipId => {
+    setActiveChip(chipId);
+    setNature('');   // 左側性質篩選をリセット
+    setPage(1);
   };
 
+  // ── Clear filters ──
+  const clearFilters = () => {
+    setNature('');
+    setRegions([]);
+    setSalaryMin(0);
+    setKeyword('');
+    setActiveChip('all');
+    setPage(1);
+  };
 
+  // ── Compute filtered jobs ──
+  // 所有篩選一律依 API 欄位（job.type, job.location, job.rate, job.tags）判斷
+  // 不用 job.title 猜類型
+  const filteredJobs = apiJobs.filter(job => {
+    const safeTitle    = typeof job.title    === 'string' ? job.title    : '';
+    const safeLocation = typeof job.location === 'string' ? job.location : '';
+    const safeType     = typeof job.type     === 'string' ? job.type.trim() : '';
+    // tags 欄位：支援陣列或逗號分隔字串
+    const tagArr = Array.isArray(job.tags)
+      ? job.tags.map(t => String(t))
+      : typeof job.tags === 'string'
+        ? job.tags.split(/[,、]/).map(t => t.trim())
+        : [];
+    const hasTag = t => tagArr.some(tag => tag.includes(t));
 
-  const activeNews = newsTabs.find(tab => tab.id === activeInfoTab);
+    // ── Chip 篩選（依 API 欄位，不猜職缺名稱）──
+    switch (activeChip) {
+      case 'dispatch':
+        if (!safeType.includes('派遣')) return false;
+        break;
+      case 'today':
+        // 今日可報班：tag 含「今日」或「報班」，或 type 為短期
+        if (!hasTag('今日') && !hasTag('報班') && !safeType.includes('短期')) return false;
+        break;
+      case 'urgent':
+        // 急徵：tag 含「急徵」
+        if (!hasTag('急徵')) return false;
+        break;
+      case 'stable':
+        if (!safeType.includes('長期')) return false;
+        break;
+      case 'noexp':
+        // 無經驗可：tag 含「無經驗」（優先），其次才用 title 判斷
+        if (!hasTag('無經驗') && !safeTitle.includes('無經驗')) return false;
+        break;
+      case 'fulltime':
+        if (!safeType.includes('正職')) return false;
+        break;
+      default:
+        break; // 'all'：不過濾
+    }
+
+    // ── 左側面板篩選（依 API 欄位）──
+    if (nature && !safeType.includes(nature)) return false;
+    if (regions.length > 0 && !regions.some(r => safeLocation.includes(r))) return false;
+    if (salaryMin > 0 && Number(job.rate || 0) < salaryMin) return false;
+    if (keyword.trim() && !safeTitle.includes(keyword.trim())) return false;
+
+    return true;
+  });
+
+  const sorted = sortJobs(filteredJobs, sortBy);
+  const totalPages = Math.ceil(sorted.length / JOBS_PER_PAGE);
+  const paginated = sorted.slice((page - 1) * JOBS_PER_PAGE, page * JOBS_PER_PAGE);
+
+  // ── Active filter count (for badge) ──
+  const activeFilterCount = (nature ? 1 : 0) + regions.length + (salaryMin > 0 ? 1 : 0);
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
-      <style>{`\n        .fixed.inset-0.bg-black.bg-opacity-50 { z-index: 9999 !important; }\n        .bg-white.rounded-lg.w-11\\/12, .bg-white.rounded-lg.w-3\\/4, .bg-white.rounded-lg.max-w-2xl { z-index: 10000 !important; }\n        .activityBannerContainer { z-index: 0 !important; }\n      `}</style>
 
+      {/* Modals */}
       <JobDetailModal job={selectedJob} onClose={() => setSelectedJob(null)} onApply={handleApply} />
-      {applyJob && <ApplicationFlow job={applyJob} onClose={closeApply} />}
+      {applyJob && <ApplicationFlow job={applyJob} onClose={() => setApplyJob(null)} />}
 
-      <nav className="bg-white shadow-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-3 flex justify-between items-center">
-          <div className="flex items-center cursor-pointer" onClick={() => navigate('/talent')}>
+      {/* Mobile filter drawer overlay */}
+      {drawerOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 z-40 md:hidden"
+          onClick={() => setDrawerOpen(false)}
+        />
+      )}
+      {/* Mobile drawer */}
+      <aside
+        className={`fixed inset-y-0 left-0 w-72 bg-white shadow-xl z-50 transition-transform duration-300 md:hidden p-6 overflow-y-auto ${
+          drawerOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <div className="flex justify-between items-center mb-4">
+          <span className="font-bold text-gray-800">篩選職缺</span>
+          <button onClick={() => setDrawerOpen(false)} className="text-gray-400 hover:text-gray-700">
+            <i className="fas fa-times text-lg" />
+          </button>
+        </div>
+        <FilterPanel
+          nature={nature} setNature={v => { setNature(v); setPage(1); }}
+          regions={regions} setRegions={v => { setRegions(v); setPage(1); }}
+          salaryMin={salaryMin} setSalaryMin={v => { setSalaryMin(v); setPage(1); }}
+          onClear={clearFilters}
+        />
+        <button
+          onClick={() => setDrawerOpen(false)}
+          className="mt-6 w-full bg-talent-600 text-white py-2.5 rounded-xl font-medium hover:bg-talent-700 transition"
+        >
+          查看 {filteredJobs.length} 筆職缺
+        </button>
+      </aside>
+
+      {/* ── Navbar ── */}
+      <nav className="bg-white shadow-sm sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+          <div className="flex items-center cursor-pointer gap-2" onClick={() => navigate('/talent')}>
             <span className="font-bold text-xl text-talent-600 tracking-wider">愜易居</span>
-            <span className="text-xs text-gray-400 ml-2 border-l pl-2">Job Seeker</span>
+            <span className="text-xs text-gray-400 border-l pl-2">找工作</span>
           </div>
           <MemberNavbar />
         </div>
       </nav>
 
-      <section className="bg-[#FFF7E6] py-12">
-        <div className="max-w-7xl mx-auto px-4 text-center">
-          <h1 className="text-4xl font-bold text-gray-800 mb-4">找到適合你的派遣工作</h1>
-          <p className="text-lg text-gray-600 mb-6">彈性排班、穩定派遣、短期班次與正職機會，一站完成媒合。</p>
+      {/* ── Hero / SearchBar ── */}
+      <section className="bg-gradient-to-b from-[#FFF7E6] to-[#FFF3DC] py-10">
+        <div className="max-w-4xl mx-auto px-4 text-center">
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">找到適合你的工作</h1>
+          <p className="text-gray-500 mb-6 text-sm">彈性排班 · 穩定派遣 · 短期班次 · 正職機會，一站完成媒合</p>
           <SearchBar onSearch={handleSearch} />
-          <div className="flex flex-wrap justify-center gap-2 mt-4">
-            {hotKeywords.map((kw, idx) => (
+        </div>
+      </section>
+
+      {/* ── Quick chips ── */}
+      <div className="bg-white border-b border-gray-100 sticky top-[57px] z-20">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="flex gap-2 py-2 overflow-x-auto scrollbar-hide whitespace-nowrap">
+            {QUICK_CHIPS.map(chip => (
               <button
-                key={idx}
-                className="text-sm text-talent-600 bg-white border border-talent-200 rounded-full px-3 py-1 hover:bg-talent-100"
-                onClick={() => handleSearch({ keyword: kw })}
+                key={chip.id}
+                onClick={() => handleChip(chip.id)}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-medium flex-shrink-0 transition-colors ${
+                  activeChip === chip.id
+                    ? 'bg-talent-600 text-white shadow-sm'
+                    : 'bg-gray-100 text-gray-600 hover:bg-talent-50 hover:text-talent-600'
+                }`}
               >
-                {kw}
+                <i className={`${chip.icon} text-xs`} />
+                {chip.label}
               </button>
             ))}
           </div>
         </div>
-      </section>
+      </div>
 
-      <section className="max-w-7xl mx-auto px-4 py-12 grid md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 bg-white rounded-lg shadow-md p-6">
-          <div className="flex border-b mb-4">
-            {newsTabs.map(tab => (
-              <button
-                key={tab.id}
-                className={`mr-4 pb-2 ${activeInfoTab === tab.id ? 'border-b-2 border-talent-600 text-talent-600' : 'text-gray-600'}`}
-                onClick={() => setActiveInfoTab(tab.id)}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-          <h2 className="text-xl font-bold text-gray-800 mb-2">{activeNews.title}</h2>
-          <p className="text-gray-600 mb-4">{activeNews.description}</p>
-          {activeNews.items && activeNews.items.length > 0 ? (
-            <ul className="list-disc list-inside space-y-1 text-gray-700">
-              {activeNews.items.map((it, i) => (
-                <li key={i}>{it}</li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-gray-5 italic">尚未有相關訊息。</p>
-          )}
-        </div>
-        <div className="space-y-6">
-          {activityBanners.map((banner, idx) => (
-            <Link
-              key={idx}
-              to={banner.link}
-              className="block rounded-lg overflow-hidden shadow-md hover:shadow-lg transition"
-            >
-              <div className="relative h-48 flex items-center bg-gradient-to-r from-talent-500 to-talent-600">
-                <img
-                  src={banner.image}
-                  alt={banner.title}
-                  className="absolute inset-0 w-full h-full object-cover"
-                  onError={e => { e.target.style.display = 'none'; }}
-                />
-                <div className="relative z-10 p-4 text-white">
-                  <h3 className="text-lg font-bold">{banner.title}</h3>
-                  <p className="text-sm mb-2">{banner.description}</p>
-                  <button className="mt-2 bg-white text-talent-600 px-4 py-1 rounded">
-                    {banner.buttonText}
-                  </button>
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </section>
+      {/* ── Main layout ── */}
+      <div className="max-w-7xl mx-auto px-4 py-6 flex gap-6" ref={jobListRef}>
 
-      <section className="max-w-7xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {quickEntries.map(entry => (
-            <div
-              key={entry.id}
-              className="bg-white p-6 rounded-lg shadow-md text-center hover:shadow-lg transition cursor-pointer"
-              onClick={() => {
-                if (entry.id === 'dispatch') setFilterType('長期');
-                else if (entry.id === 'today') setFilterType('短期');
-                else if (entry.id === 'stable') setFilterType('長期');
-                else if (entry.id === 'business') navigate('/business');
-              }}
-            >
-              <i className={`${entry.icon} text-3xl text-talent-600 mb-2`} />
-              <h3 className="font-bold text-lg mb-1">{entry.title}</h3>
-              <p className="text-sm text-gray-500">{entry.description}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="max-w-7xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold text-gray-800">適合你的好工作</h2>
-          <div className="flex flex-wrap gap-2">
-            {recommendTabs.map(tab => (
-              <button
-                key={tab.id}
-                className={`px-3 py-1 rounded-full text-sm ${activeRecommendTab === tab.id ? 'bg-talent-600 text-white' : 'bg-gray-200 text-gray-700'}`}
-                onClick={() => setActiveRecommendTab(tab.id)}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        {renderJobCards(getRecommendJobs())}
-      </section>
-
-      <div className="max-w-[1200px] mx-auto px-4 py-8 flex flex-col md:flex-row gap-8">
-        <aside className="w-full md:w-[260px] shrink-0 hidden md:block">
-          <div className="bg-white p-6 rounded-lg shadow-md sticky top-24">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="font-bold text-gray-800">篩選條件</h3>
-              <button className="text-xs text-gray-500" onClick={() => { setFilterType('all'); setSelectedRegions([]); setKeyword(''); }}>
-                清除
-              </button>
-            </div>
-            <div className="mb-6">
-              <h4 className="text-xs font-bold text-gray-400 uppercase mb-3">工作類型</h4>
-              <div className="space-y-2">
-                {['短期', '長期', '專案', '排班'].map(type => (
-                  <label key={type} className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="jobType"
-                      checked={filterType === type}
-                      onChange={() => setFilterType(type)}
-                      className="text-talent-600"
-                    />
-                    <span className="text-sm text-gray-600">{type}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
+        {/* ── Left sidebar (desktop) ── */}
+        <aside className="hidden md:block w-[240px] flex-shrink-0">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 sticky top-[110px]">
+            <FilterPanel
+              nature={nature} setNature={v => { setNature(v); setPage(1); }}
+              regions={regions} setRegions={v => { setRegions(v); setPage(1); }}
+              salaryMin={salaryMin} setSalaryMin={v => { setSalaryMin(v); setPage(1); }}
+              onClear={clearFilters}
+            />
           </div>
         </aside>
 
-        <div className="md:hidden mb-4">
-          <button
-            className="w-full text-left px-4 py-2 border rounded"
-            onClick={() => setFilterOpen(!filterOpen)}
-          >
-            {filterOpen ? '收合篩選' : '展開篩選'}
-          </button>
-          {filterOpen && (
-            <div className="bg-white p-4 rounded-lg shadow-md mt-2">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="font-bold text-gray-800">篩選條件</h3>
-                <button className="text-xs text-gray-500" onClick={() => { setFilterType('all'); setSelectedRegions([]); setKeyword(''); }}>
-                  清除
-                </button>
-              </div>
-              <div className="mb-4">
-                <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">工作類型</h4>
-                <div className="space-y-2">
-                  {['短期', '長期', '專案', '排班'].map(type => (
-                    <label key={type} className="flex items-center space-x-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="jobTypeMobile"
-                        checked={filterType === type}
-                        onChange={() => setFilterType(type)}
-                        className="text-talent-600"
-                      />
-                      <span className="text-sm text-gray-600">{type}</span>
-                    </label>
+        {/* ── Right: job list ── */}
+        <main className="flex-1 min-w-0">
+
+          {/* List header */}
+          <div className="flex items-center justify-between mb-4 gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Mobile filter button */}
+              <button
+                className="md:hidden flex items-center gap-1.5 border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-600 hover:border-talent-400 hover:text-talent-600 transition-colors"
+                onClick={() => setDrawerOpen(true)}
+              >
+                <i className="fas fa-sliders-h" />
+                篩選
+                {activeFilterCount > 0 && (
+                  <span className="ml-1 bg-talent-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+              <h2 className="font-bold text-gray-800 text-base">
+                {activeChip === 'all' ? '全部職缺' : QUICK_CHIPS.find(c => c.id === activeChip)?.label}
+                <span className="ml-1.5 text-gray-400 font-normal text-sm">({filteredJobs.length} 筆)</span>
+              </h2>
+            </div>
+            <select
+              value={sortBy}
+              onChange={e => { setSortBy(e.target.value); setPage(1); }}
+              className="border border-gray-200 rounded-lg text-sm px-2 py-1.5 text-gray-600 bg-white focus:outline-none focus:border-talent-400"
+            >
+              <option value="latest">最新上架</option>
+              <option value="salary_desc">薪資高到低</option>
+            </select>
+          </div>
+
+          {/* API error */}
+          {apiError && (
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-600 mb-4">
+              ⚠️ 目前無法讀取職缺資料，請稍後再試。
+            </div>
+          )}
+
+          {/* Loading */}
+          {apiLoading && (
+            <div className="flex justify-center py-16">
+              <div className="w-8 h-8 border-4 border-talent-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
+
+          {/* Job cards */}
+          {!apiLoading && (
+            <>
+              {paginated.length > 0 ? (
+                <div className="space-y-3">
+                  {paginated.map(job => (
+                    <JobCard
+                      key={job.id}
+                      job={job}
+                      onClick={() => setSelectedJob(job)}
+                      onApply={handleApply}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-white rounded-xl border border-gray-100 px-6 py-16 text-center">
+                  <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i className="fas fa-search text-gray-300 text-2xl" />
+                  </div>
+                  <p className="text-gray-500 font-medium">目前沒有符合條件的工作</p>
+                  <button
+                    onClick={clearFilters}
+                    className="mt-4 text-sm text-talent-600 hover:underline"
+                  >
+                    清除篩選條件
+                  </button>
+                </div>
+              )}
+
+              {/* Pagination — only when > 1 page */}
+              {totalPages > 1 && (
+                <div className="mt-6 flex justify-center gap-1">
+                  <button
+                    disabled={page === 1}
+                    onClick={() => setPage(p => p - 1)}
+                    className="px-3 py-1.5 rounded-lg border text-sm disabled:opacity-40 hover:bg-gray-100 transition-colors"
+                  >
+                    <i className="fas fa-chevron-left" />
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setPage(p)}
+                      className={`w-8 h-8 rounded-lg text-sm transition-colors ${
+                        p === page
+                          ? 'bg-talent-600 text-white'
+                          : 'border hover:bg-gray-100 text-gray-600'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                  <button
+                    disabled={page === totalPages}
+                    onClick={() => setPage(p => p + 1)}
+                    className="px-3 py-1.5 rounded-lg border text-sm disabled:opacity-40 hover:bg-gray-100 transition-colors"
+                  >
+                    <i className="fas fa-chevron-right" />
+                  </button>
+                </div>
+              )}
+
+              {/* ── 熱門工作分類（列表下方）── */}
+              <div className="mt-10">
+                <h3 className="font-bold text-gray-700 text-base mb-4">熱門工作分類</h3>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+                  {HOT_CATEGORIES.map(cat => (
+                    <button
+                      key={cat.id}
+                      onClick={() => handleSearch({ keyword: cat.label })}
+                      className="flex flex-col items-center gap-1.5 bg-white border border-gray-100 rounded-xl py-4 px-2 hover:border-talent-300 hover:shadow-sm transition-all"
+                    >
+                      <div className="w-10 h-10 bg-talent-50 rounded-full flex items-center justify-center">
+                        <i className={`${cat.icon} text-talent-600`} />
+                      </div>
+                      <span className="text-xs text-gray-600 font-medium text-center">{cat.label}</span>
+                    </button>
                   ))}
                 </div>
               </div>
 
-            </div>
-          )}
-        </div>
-
-        <main className="flex-grow" ref={jobListRef}>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {apiJobs.slice(0, 6).map(job => (
-              <SmallCard key={job.id} job={job} />
-            ))}
-          </div>
-
-          <div className="flex items-center justify-between mb-4 mt-8">
-            <h2 className="text-xl font-bold text-gray-800">最新職缺 ({filteredJobs.length})</h2>
-          {apiError && <p className="text-red-600">目前無法讀取職缺</p>}
-            <select className="border rounded p-1 text-sm">
-              <option>最新上架</option>
-              <option>薪資高到低</option>
-            </select>
-          </div>
-
-          <div className="grid gap-4">
-            {filteredJobs.length > 0 ? (
-              filteredJobs.map(job => (
-                <div
-                  key={job.id}
-                  className="bg-white p-6 rounded-lg shadow-sm border hover:border-talent-300 transition-all cursor-pointer"
-                  onClick={() => setSelectedJob(job)}
+              {/* CTA */}
+              <div className="mt-8 text-center">
+                <Link
+                  to="/business"
+                  className="inline-block bg-talent-600 text-white px-6 py-2.5 rounded-xl font-medium hover:bg-talent-700 transition text-sm"
                 >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-bold text-lg">{job.title}</h3>
-                      <p className="text-sm text-gray-500">
-                        {job.company} • {job.location}
-                      </p>
-                    </div>
-                    <span className="text-talent-600 font-bold">${job.rate}/hr</span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="text-center text-gray-500">目前沒有符合條件的工作</p>
-            )}
-          </div>
-
-          <div className="mt-8 flex justify-center gap-2">
-            <button className="px-4 py-2 border rounded">1</button>
-            <button className="px-4 py-2 border rounded">2</button>
-            <button className="px-4 py-2 border rounded">3</button>
-          </div>
-
-          <SectionTitle title="熱門工作分類" />
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            {popularCategories.map(cat => (
-              <WorkEntryCard key={cat.id} title={cat.title} onClick={() => {}} />
-            ))}
-          </div>
-
-          <div className="text-center my-8">
-            <Link
-              to="/business"
-              className="inline-block bg-talent-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-talent-700 transition"
-            >
-              企業找人才
-            </Link>
-          </div>
+                  企業找人才 →
+                </Link>
+              </div>
+            </>
+          )}
         </main>
       </div>
     </div>
