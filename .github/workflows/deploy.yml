@@ -33,6 +33,8 @@ jobs:
       - name: Build site
         run: npm run build
         working-directory: ./解壓縮
+        env:
+          VITE_TALENT_API_URL: https://script.google.com/macros/s/AKfycbxvY5tw-ZoJvg8flDWtM2xeNwaBnzy2YqT-sChOgeZQ1jm0K4ZVr4Sn3AShKdARmhwh/exec
 
       - name: Configure Pages
         id: configure_pages
