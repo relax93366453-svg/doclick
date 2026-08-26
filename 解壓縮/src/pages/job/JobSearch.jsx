@@ -52,11 +52,23 @@ const HOT_CATEGORIES = [
 
 const JOBS_PER_PAGE = 10;
 
+// ── 薪資數值 helper ────────────────────────────────────────────────────────────
+function getJobMinSalary(job) {
+  if (job?.salaryMin !== undefined && job?.salaryMin !== null && job?.salaryMin !== '') {
+    const value = Number(job.salaryMin);
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  // 相容舊資料：rate 可能是 "210～250"、"210-250" 或單一數字。
+  const match = String(job?.rate ?? '').match(/\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : 0;
+}
+
 // ── 排序函式 ─────────────────────────────────────────────────────────────────
 function sortJobs(jobs, sortBy) {
   const copy = [...jobs];
   if (sortBy === 'salary_desc') {
-    copy.sort((a, b) => Number(b.rate || 0) - Number(a.rate || 0));
+    copy.sort((a, b) => getJobMinSalary(b) - getJobMinSalary(a));
   } else {
     // 最新上架：依 id 降序（id 越大越新，或依 createdAt）
     copy.sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
@@ -93,9 +105,10 @@ const JobCard = ({ job, onClick, onApply }) => {
 
       {/* Right: salary + action */}
       <div className="flex sm:flex-col items-center sm:items-end gap-3 flex-shrink-0">
-        {job.rate && (
+        {(job.rate || job.salaryMin) && (
           <span className="text-talent-600 font-bold text-base whitespace-nowrap">
-            NT${job.rate}/hr
+            NT${job.rate || job.salaryMin}
+            {job.salaryType === '時薪' || !job.salaryType ? '/hr' : ''}
           </span>
         )}
         <button
@@ -291,7 +304,10 @@ const JobSearch = () => {
   // 不用 job.title 猜類型
   const filteredJobs = apiJobs.filter(job => {
     const safeTitle    = typeof job.title    === 'string' ? job.title    : '';
-    const safeLocation = typeof job.location === 'string' ? job.location : '';
+    const safeLocation =
+      typeof job.location === 'string' && job.location.trim()
+        ? job.location
+        : [job.city, job.district].filter(Boolean).join('');
     const safeType     = typeof job.type     === 'string' ? job.type.trim() : '';
     // tags 欄位：支援陣列或逗號分隔字串
     const tagArr = Array.isArray(job.tags)
@@ -331,7 +347,7 @@ const JobSearch = () => {
     // ── 左側面板篩選（依 API 欄位）──
     if (nature && !safeType.includes(nature)) return false;
     if (regions.length > 0 && !regions.some(r => safeLocation.includes(r))) return false;
-    if (salaryMin > 0 && Number(job.rate || 0) < salaryMin) return false;
+    if (salaryMin > 0 && getJobMinSalary(job) < salaryMin) return false;
     if (keyword.trim() && !safeTitle.includes(keyword.trim())) return false;
 
     return true;
