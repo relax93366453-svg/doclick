@@ -42,12 +42,12 @@ const SALARY_OPTIONS = [
 
 // 熱門工作分類（移到列表下方）
 const HOT_CATEGORIES = [
-  { id: 'admin',    label: '行政助理',   icon: 'fas fa-file-alt' },
-  { id: 'retail',   label: '門市人員',   icon: 'fas fa-store' },
-  { id: 'cs',       label: '客服',       icon: 'fas fa-headset' },
-  { id: 'operator', label: '作業員',     icon: 'fas fa-cogs' },
-  { id: 'logistics',label: '倉儲物流',   icon: 'fas fa-boxes' },
-  { id: 'event',    label: '活動支援',   icon: 'fas fa-hands-helping' },
+  { id: 'admin',     label: '行政助理', icon: 'fas fa-file-alt',      keywords: ['行政', '助理', '會計', '文書'] },
+  { id: 'retail',    label: '門市人員', icon: 'fas fa-store',         keywords: ['門市', '店員', '銷售', '寵物店'] },
+  { id: 'cs',        label: '客服',     icon: 'fas fa-headset',       keywords: ['客服', '電話客服', '文字客服'] },
+  { id: 'operator',  label: '作業員',   icon: 'fas fa-cogs',          keywords: ['作業員', '產線', '包裝', '組裝'] },
+  { id: 'logistics', label: '倉儲物流', icon: 'fas fa-boxes',         keywords: ['倉儲', '物流', '理貨', '撿貨', '出貨'] },
+  { id: 'event',     label: '活動支援', icon: 'fas fa-hands-helping', keywords: ['活動', '支援', '展場', '臨時'] },
 ];
 
 const JOBS_PER_PAGE = 10;
@@ -62,6 +62,18 @@ function getJobMinSalary(job) {
   // 相容舊資料：rate 可能是 "210～250"、"210-250" 或單一數字。
   const match = String(job?.rate ?? '').match(/\d+(?:\.\d+)?/);
   return match ? Number(match[0]) : 0;
+}
+
+function getJobMaxSalary(job) {
+  if (job?.salaryMax !== undefined && job?.salaryMax !== null && job?.salaryMax !== '') {
+    const value = Number(job.salaryMax);
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  const nums = String(job?.rate ?? '').match(/\d+(?:\.\d+)?/g) || [];
+  if (!nums.length) return getJobMinSalary(job);
+
+  return Math.max(...nums.map(Number).filter(Number.isFinite));
 }
 
 // ── 排序函式 ─────────────────────────────────────────────────────────────────
@@ -220,6 +232,7 @@ const JobSearch = () => {
   const [regions, setRegions]           = useState([]);
   const [salaryMin, setSalaryMin]       = useState(0);
   const [keyword, setKeyword]           = useState('');
+  const [hotCategory, setHotCategory]   = useState('');
   const [sortBy, setSortBy]             = useState('latest');
   const [page, setPage]                 = useState(1);
 
@@ -242,6 +255,7 @@ const JobSearch = () => {
       setRegions([]);
       setSalaryMin(0);
       setKeyword('');
+      setHotCategory('');
       setSortBy('latest');
       setPage(1);
       setDrawerOpen(false);
@@ -300,19 +314,60 @@ const JobSearch = () => {
   };
 
   // ── Search bar handler ──
-  const handleSearch = ({ keyword: kw = '' }) => {
+  // SearchBar 不論傳 keyword/location/region/area/city/type/jobType/nature 哪一種名稱都能接。
+  const handleSearch = (payload = {}) => {
+    const kw = String(payload.keyword ?? payload.q ?? '').trim();
+
+    const areaRaw = String(
+      payload.location ??
+      payload.region ??
+      payload.area ??
+      payload.city ??
+      ''
+    ).trim();
+
+    const typeRaw = String(
+      payload.type ??
+      payload.jobType ??
+      payload.nature ??
+      ''
+    ).trim();
+
     setKeyword(kw);
+    setHotCategory('');
+    setActiveChip('all');
+
+    if (areaRaw && !['全部地區', '全部', '不限'].includes(areaRaw)) {
+      setRegions([areaRaw]);
+    } else {
+      setRegions([]);
+    }
+
+    if (typeRaw && !['全部類型', '全部', '不限'].includes(typeRaw)) {
+      setNature(typeRaw);
+    } else {
+      setNature('');
+    }
+
     setPage(1);
-    jobListRef.current?.scrollIntoView({ behavior: 'smooth' });
+    jobListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   // ── Chip click ──
-  // chip は activeChip だけを変える。左側の nature 篩選とは独立。
-  // 切り替え時は nature をリセットして二重フィルタにならないようにする。
+  // 快速按鈕獨立運作：點哪顆就先清除其他會衝突的篩選，避免看起來像「按了沒反應」。
   const handleChip = chipId => {
     setActiveChip(chipId);
-    setNature('');   // 左側性質篩選をリセット
+    setNature('');
+    setRegions([]);
+    setSalaryMin(0);
+    setKeyword('');
+    setHotCategory('');
     setPage(1);
+
+    jobListRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start'
+    });
   };
 
   // ── Clear filters ──
@@ -321,7 +376,9 @@ const JobSearch = () => {
     setRegions([]);
     setSalaryMin(0);
     setKeyword('');
+    setHotCategory('');
     setActiveChip('all');
+    setSortBy('latest');
     setPage(1);
   };
 
@@ -329,12 +386,16 @@ const JobSearch = () => {
   // 所有篩選一律依 API 欄位（job.type, job.location, job.rate, job.tags）判斷
   // 不用 job.title 猜類型
   const filteredJobs = apiJobs.filter(job => {
-    const safeTitle    = typeof job.title    === 'string' ? job.title    : '';
+    const safeTitle    = typeof job.title === 'string' ? job.title : '';
+    const safeCompany  = typeof job.company === 'string' ? job.company : '';
     const safeLocation =
       typeof job.location === 'string' && job.location.trim()
         ? job.location
         : [job.city, job.district].filter(Boolean).join('');
-    const safeType     = typeof job.type     === 'string' ? job.type.trim() : '';
+    const safeType     = typeof job.type === 'string' ? job.type.trim() : '';
+    const safeShift    = typeof job.shift === 'string' ? job.shift : '';
+    const safeDesc     = typeof job.description === 'string' ? job.description : '';
+    const safeReq      = typeof job.requirements === 'string' ? job.requirements : '';
     // tags 欄位：支援陣列或逗號分隔字串
     const tagArr = Array.isArray(job.tags)
       ? job.tags.map(t => String(t))
@@ -343,38 +404,83 @@ const JobSearch = () => {
         : [];
     const hasTag = t => tagArr.some(tag => tag.includes(t));
 
-    // ── Chip 篩選（依 API 欄位，不猜職缺名稱）──
+    const searchableText = [
+      safeTitle,
+      safeCompany,
+      safeLocation,
+      safeType,
+      safeShift,
+      safeDesc,
+      safeReq,
+      ...tagArr
+    ].join(' ');
+
+    const hasAny = words =>
+      words.some(word => searchableText.includes(word));
+
+    // ── Chip 篩選：每一顆都對應實際資料 ──
     switch (activeChip) {
       case 'dispatch':
-        if (!safeType.includes('派遣')) return false;
+        if (!hasAny(['派遣'])) return false;
         break;
       case 'today':
-        // 今日可報班：tag 含「今日」或「報班」，或 type 為短期
-        if (!hasTag('今日') && !hasTag('報班') && !safeType.includes('短期')) return false;
+        if (!hasAny(['今日可報班', '今日', '可報班', '報班', '當日', '短期'])) return false;
         break;
       case 'urgent':
-        // 急徵：tag 含「急徵」
-        if (!hasTag('急徵')) return false;
+        if (!hasAny(['急徵', '急缺', '立即上班', '立即到職', '缺人'])) return false;
         break;
       case 'stable':
-        if (!safeType.includes('長期')) return false;
+        if (!hasAny(['長期', '穩定', '固定班', '長期穩定'])) return false;
         break;
       case 'noexp':
-        // 無經驗可：tag 含「無經驗」（優先），其次才用 title 判斷
-        if (!hasTag('無經驗') && !safeTitle.includes('無經驗')) return false;
+        if (!hasAny(['無經驗', '免經驗', '經驗不拘', '不限經驗'])) return false;
         break;
       case 'fulltime':
-        if (!safeType.includes('正職')) return false;
+        if (!hasAny(['正職', '全職'])) return false;
         break;
       default:
-        break; // 'all'：不過濾
+        break;
     }
 
-    // ── 左側面板篩選（依 API 欄位）──
-    if (nature && !safeType.includes(nature)) return false;
-    if (regions.length > 0 && !regions.some(r => safeLocation.includes(r))) return false;
-    if (salaryMin > 0 && getJobMinSalary(job) < salaryMin) return false;
-    if (keyword.trim() && !safeTitle.includes(keyword.trim())) return false;
+    // 左側工作性質
+    if (nature) {
+      const natureKeywords = {
+        正職: ['正職', '全職'],
+        派遣: ['派遣'],
+        短期: ['短期', '臨時'],
+        長期: ['長期', '穩定'],
+        排班: ['排班', '彈性班', '輪班']
+      };
+
+      const words = natureKeywords[nature] || [nature];
+      if (!hasAny(words)) return false;
+    }
+
+    // 工作地區
+    if (
+      regions.length > 0 &&
+      !regions.some(r => safeLocation.includes(r))
+    ) return false;
+
+    // 薪資：採最高可達薪資判斷，因此 210～250 會出現在 250/hr 以上。
+    if (
+      salaryMin > 0 &&
+      getJobMaxSalary(job) < salaryMin
+    ) return false;
+
+    // 關鍵字：職稱 / 公司 / 地區 / 工作內容 / 條件 / 標籤都可搜尋
+    if (
+      keyword.trim() &&
+      !searchableText.toLowerCase().includes(keyword.trim().toLowerCase())
+    ) return false;
+
+    // 熱門工作分類
+    if (hotCategory) {
+      const category = HOT_CATEGORIES.find(c => c.id === hotCategory);
+      if (category && !hasAny(category.keywords || [category.label])) {
+        return false;
+      }
+    }
 
     return true;
   });
@@ -384,7 +490,11 @@ const JobSearch = () => {
   const paginated = sorted.slice((page - 1) * JOBS_PER_PAGE, page * JOBS_PER_PAGE);
 
   // ── Active filter count (for badge) ──
-  const activeFilterCount = (nature ? 1 : 0) + regions.length + (salaryMin > 0 ? 1 : 0);
+  const activeFilterCount =
+    (nature ? 1 : 0) +
+    regions.length +
+    (salaryMin > 0 ? 1 : 0) +
+    (hotCategory ? 1 : 0);
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
@@ -413,9 +523,9 @@ const JobSearch = () => {
           </button>
         </div>
         <FilterPanel
-          nature={nature} setNature={v => { setNature(v); setPage(1); }}
-          regions={regions} setRegions={v => { setRegions(v); setPage(1); }}
-          salaryMin={salaryMin} setSalaryMin={v => { setSalaryMin(v); setPage(1); }}
+          nature={nature} setNature={v => { setNature(v); setActiveChip('all'); setHotCategory(''); setPage(1); }}
+          regions={regions} setRegions={v => { setRegions(v); setActiveChip('all'); setHotCategory(''); setPage(1); }}
+          salaryMin={salaryMin} setSalaryMin={v => { setSalaryMin(v); setActiveChip('all'); setHotCategory(''); setPage(1); }}
           onClear={clearFilters}
         />
         <button
@@ -475,9 +585,9 @@ const JobSearch = () => {
         <aside className="hidden md:block w-[240px] flex-shrink-0">
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 sticky top-[110px]">
             <FilterPanel
-              nature={nature} setNature={v => { setNature(v); setPage(1); }}
-              regions={regions} setRegions={v => { setRegions(v); setPage(1); }}
-              salaryMin={salaryMin} setSalaryMin={v => { setSalaryMin(v); setPage(1); }}
+              nature={nature} setNature={v => { setNature(v); setActiveChip('all'); setHotCategory(''); setPage(1); }}
+              regions={regions} setRegions={v => { setRegions(v); setActiveChip('all'); setHotCategory(''); setPage(1); }}
+              salaryMin={salaryMin} setSalaryMin={v => { setSalaryMin(v); setActiveChip('all'); setHotCategory(''); setPage(1); }}
               onClear={clearFilters}
             />
           </div>
@@ -600,8 +710,25 @@ const JobSearch = () => {
                   {HOT_CATEGORIES.map(cat => (
                     <button
                       key={cat.id}
-                      onClick={() => handleSearch({ keyword: cat.label })}
-                      className="flex flex-col items-center gap-1.5 bg-white border border-gray-100 rounded-xl py-4 px-2 hover:border-talent-300 hover:shadow-sm transition-all"
+                      onClick={() => {
+                        setHotCategory(cat.id);
+                        setKeyword('');
+                        setNature('');
+                        setRegions([]);
+                        setSalaryMin(0);
+                        setActiveChip('all');
+                        setPage(1);
+
+                        jobListRef.current?.scrollIntoView({
+                          behavior: 'smooth',
+                          block: 'start'
+                        });
+                      }}
+                      className={`flex flex-col items-center gap-1.5 bg-white border rounded-xl py-4 px-2 transition-all ${
+                        hotCategory === cat.id
+                          ? 'border-talent-500 ring-2 ring-talent-100 shadow-sm'
+                          : 'border-gray-100 hover:border-talent-300 hover:shadow-sm'
+                      }`}
                     >
                       <div className="w-10 h-10 bg-talent-50 rounded-full flex items-center justify-center">
                         <i className={`${cat.icon} text-talent-600`} />
