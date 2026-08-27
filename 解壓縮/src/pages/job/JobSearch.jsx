@@ -232,6 +232,32 @@ const JobSearch = () => {
 
   const jobListRef = useRef(null);
 
+  // ── 每次重新進入 /jobs 都回到預設「不限」 ──
+  // 避免瀏覽器返回上一頁 / bfcache 時保留上一次的 250/hr、地區或工作性質篩選，
+  // 造成使用者誤以為官網沒有職缺。
+  useEffect(() => {
+    const resetFiltersToDefault = () => {
+      setActiveChip('all');
+      setNature('');
+      setRegions([]);
+      setSalaryMin(0);
+      setKeyword('');
+      setSortBy('latest');
+      setPage(1);
+      setDrawerOpen(false);
+    };
+
+    // 一進此頁先重設一次
+    resetFiltersToDefault();
+
+    // 使用瀏覽器上一頁 / 下一頁回到此頁時，也重新顯示全部職缺
+    window.addEventListener('pageshow', resetFiltersToDefault);
+
+    return () => {
+      window.removeEventListener('pageshow', resetFiltersToDefault);
+    };
+  }, []);
+
   // ── Fetch jobs ──
   useEffect(() => {
     fetchPublishedJobs()
