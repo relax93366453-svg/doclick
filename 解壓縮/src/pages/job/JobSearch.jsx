@@ -403,6 +403,7 @@ const JobSearch = () => {
         ? job.tags.split(/[,、]/).map(t => t.trim())
         : [];
     const hasTag = t => tagArr.some(tag => tag.includes(t));
+    const hasExactTag = t => tagArr.some(tag => tag.trim() === t);
 
     const searchableText = [
       safeTitle,
@@ -424,16 +425,16 @@ const JobSearch = () => {
         if (!hasAny(['派遣'])) return false;
         break;
       case 'today':
-        if (!hasAny(['今日可報班', '今日', '可報班', '報班', '當日', '短期'])) return false;
+        if (!hasExactTag('今日可報班')) return false;
         break;
       case 'urgent':
-        if (!hasAny(['急徵', '急缺', '立即上班', '立即到職', '缺人'])) return false;
+        if (!hasExactTag('急徵職缺')) return false;
         break;
       case 'stable':
-        if (!hasAny(['長期', '穩定', '固定班', '長期穩定'])) return false;
+        if (!hasExactTag('長期穩定')) return false;
         break;
       case 'noexp':
-        if (!hasAny(['無經驗', '免經驗', '經驗不拘', '不限經驗'])) return false;
+        if (!hasExactTag('無經驗可')) return false;
         break;
       case 'fulltime':
         if (!hasAny(['正職', '全職'])) return false;
