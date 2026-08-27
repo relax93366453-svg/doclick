@@ -70,22 +70,103 @@ const DEFAULT_RESUME = {
   updatedAt: '',
 };
 
+// ─── Data safety helpers ──────────────────────────────────────────────────────
+// GAS / 舊版履歷資料可能把原本應是字串的欄位存成 number / array / object。
+// React 畫面不能直接對這些值呼叫 .trim()，否則會整頁崩潰。
+function toText(value, fallback = '') {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+
+  if (Array.isArray(value)) {
+    return value
+      .map(v => toText(v, ''))
+      .filter(v => v.trim())
+      .join('、');
+  }
+
+  if (typeof value === 'object') {
+    const preferredKeys = [
+      'name', 'title', 'label', 'value', 'text',
+      'language', 'school', 'company', 'skill', 'issuer'
+    ];
+    for (const key of preferredKeys) {
+      if (Object.prototype.hasOwnProperty.call(value, key)) {
+        const t = toText(value[key], '');
+        if (t.trim()) return t;
+      }
+    }
+    return fallback;
+  }
+
+  return fallback;
+}
+
+const hasText = value => toText(value, '').trim().length > 0;
+
+function parseStructured(value) {
+  if (typeof value !== 'string') return value;
+  const s = value.trim();
+  if (!s) return value;
+
+  if (
+    (s.startsWith('[') && s.endsWith(']')) ||
+    (s.startsWith('{') && s.endsWith('}'))
+  ) {
+    try {
+      return JSON.parse(s);
+    } catch {
+      return value;
+    }
+  }
+  return value;
+}
+
+function toArray(value, { splitText = false } = {}) {
+  const parsed = parseStructured(value);
+
+  if (Array.isArray(parsed)) return parsed;
+  if (parsed === null || parsed === undefined || parsed === '') return [];
+
+  if (splitText && typeof parsed === 'string') {
+    return parsed
+      .split(/\r?\n|、|，|,/)
+      .map(v => v.trim())
+      .filter(Boolean);
+  }
+
+  return [parsed];
+}
+
+function toObject(value) {
+  const parsed = parseStructured(value);
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+    ? parsed
+    : {};
+}
+
+function toBool(value) {
+  if (value === true || value === false) return value;
+  const s = String(value ?? '').trim().toLowerCase();
+  return ['true', '1', 'yes', 'y', '是', '同意'].includes(s);
+}
+
 // ─── Completion calculation ────────────────────────────────────────────────────
 // Total weight = 100. 80+ is "ready to apply".
 const COMPLETION_CHECKS = [
-  { id: 'name',      weight: 10, label: '填寫姓名',             section: 'basic',       check: r => !!r.name?.trim() },
-  { id: 'title',     weight: 5,  label: '填寫目前 / 最近職稱',  section: 'basic',       check: r => !!r.title?.trim() },
-  { id: 'location',  weight: 5,  label: '填寫所在縣市',         section: 'basic',       check: r => !!r.location?.trim() },
-  { id: 'phone',     weight: 5,  label: '填寫手機號碼',         section: 'basic',       check: r => !!r.phone?.trim() },
-  { id: 'email',     weight: 5,  label: '填寫 Email',           section: 'basic',       check: r => !!r.email?.trim() },
-  { id: 'photo',     weight: 5,  label: '上傳大頭照',           section: 'basic',       check: r => !!r.photo },
-  { id: 'bio',       weight: 10, label: '完善自傳（30 字以上）', section: 'bio',        check: r => (r.bio?.trim().length || 0) >= 30 },
-  { id: 'education', weight: 10, label: '新增至少 1 筆學歷',    section: 'education',   check: r => (r.education?.length || 0) >= 1 },
-  { id: 'work',      weight: 15, label: '新增至少 1 筆工作經歷', section: 'work',       check: r => (r.workExperience?.length || 0) >= 1 },
-  { id: 'dTitle',    weight: 10, label: '填寫希望職稱',         section: 'preferences', check: r => !!r.jobPreferences?.desiredTitle?.trim() },
-  { id: 'dLoc',      weight: 5,  label: '選擇希望工作地點',     section: 'preferences', check: r => (r.jobPreferences?.desiredLocations?.length || 0) >= 1 },
-  { id: 'salary',    weight: 5,  label: '填寫希望待遇',         section: 'preferences', check: r => !!r.jobPreferences?.salary },
-  { id: 'skills',    weight: 10, label: '新增至少 2 項專長',    section: 'skills',      check: r => (r.skills?.length || 0) >= 2 },
+  { id: 'name',      weight: 10, label: '填寫姓名',             section: 'basic',       check: r => hasText(r?.name) },
+  { id: 'title',     weight: 5,  label: '填寫目前 / 最近職稱',  section: 'basic',       check: r => hasText(r?.title) },
+  { id: 'location',  weight: 5,  label: '填寫所在縣市',         section: 'basic',       check: r => hasText(r?.location) },
+  { id: 'phone',     weight: 5,  label: '填寫手機號碼',         section: 'basic',       check: r => hasText(r?.phone) },
+  { id: 'email',     weight: 5,  label: '填寫 Email',           section: 'basic',       check: r => hasText(r?.email) },
+  { id: 'photo',     weight: 5,  label: '上傳大頭照',           section: 'basic',       check: r => hasText(r?.photo) },
+  { id: 'bio',       weight: 10, label: '完善自傳（30 字以上）', section: 'bio',        check: r => toText(r?.bio).trim().length >= 30 },
+  { id: 'education', weight: 10, label: '新增至少 1 筆學歷',    section: 'education',   check: r => Array.isArray(r?.education) && r.education.length >= 1 },
+  { id: 'work',      weight: 15, label: '新增至少 1 筆工作經歷', section: 'work',       check: r => Array.isArray(r?.workExperience) && r.workExperience.length >= 1 },
+  { id: 'dTitle',    weight: 10, label: '填寫希望職稱',         section: 'preferences', check: r => hasText(r?.jobPreferences?.desiredTitle) },
+  { id: 'dLoc',      weight: 5,  label: '選擇希望工作地點',     section: 'preferences', check: r => Array.isArray(r?.jobPreferences?.desiredLocations) && r.jobPreferences.desiredLocations.length >= 1 },
+  { id: 'salary',    weight: 5,  label: '填寫希望待遇',         section: 'preferences', check: r => hasText(r?.jobPreferences?.salary) },
+  { id: 'skills',    weight: 10, label: '新增至少 2 項專長',    section: 'skills',      check: r => Array.isArray(r?.skills) && r.skills.length >= 2 },
 ];
 
 function calcCompletion(resume) {
@@ -149,6 +230,163 @@ function translateSaveError(errMsg) {
 
 // ─── Unique ID helper ──────────────────────────────────────────────────────────
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
+
+function normalizeResumeData(raw, localPhoto = '') {
+  const source = toObject(raw);
+
+  const prefsSource = toObject(
+    source.jobPreferences ??
+    source.preferences ??
+    source.jobPreference
+  );
+
+  const education = toArray(
+    source.education ??
+    source.educations ??
+    source.educationList
+  )
+    .map(item => {
+      const e = toObject(item);
+      return {
+        id: toText(e.id).trim() || uid(),
+        school: toText(e.school ?? e.name),
+        major: toText(e.major ?? e.department),
+        degree: toText(e.degree) || '學士',
+        startYear: toText(e.startYear ?? e.startDate),
+        endYear: toText(e.endYear ?? e.endDate),
+        current: toBool(e.current),
+      };
+    })
+    .filter(e => hasText(e.school) || hasText(e.major) || hasText(e.degree));
+
+  const workExperience = toArray(
+    source.workExperience ??
+    source.workExperiences ??
+    source.experiences
+  )
+    .map(item => {
+      const e = toObject(item);
+      return {
+        id: toText(e.id).trim() || uid(),
+        company: toText(e.company),
+        title: toText(e.title ?? e.position),
+        industry: toText(e.industry ?? e.department),
+        startDate: toText(e.startDate),
+        endDate: toText(e.endDate),
+        current: toBool(e.current),
+        description: toText(e.description ?? e.content),
+      };
+    })
+    .filter(e => hasText(e.company) || hasText(e.title));
+
+  const languages = toArray(source.languages ?? source.language)
+    .map(item => {
+      if (typeof item === 'string') {
+        return {
+          id: uid(),
+          language: toText(item) || '英文',
+          level: '中等',
+        };
+      }
+
+      const e = toObject(item);
+      return {
+        id: toText(e.id).trim() || uid(),
+        language: toText(e.language ?? e.name) || '英文',
+        level: toText(e.level) || '中等',
+      };
+    })
+    .filter(e => hasText(e.language));
+
+  const skills = toArray(
+    source.skills ??
+    source.specialties ??
+    source.specialty,
+    { splitText: true }
+  )
+    .map(item => {
+      if (typeof item === 'string' || typeof item === 'number') {
+        return toText(item).trim();
+      }
+      const e = toObject(item);
+      return toText(e.name ?? e.skill ?? e.label ?? e.value).trim();
+    })
+    .filter(Boolean);
+
+  const certifications = toArray(
+    source.certifications ??
+    source.certificates ??
+    source.certs
+  )
+    .map(item => {
+      if (typeof item === 'string') {
+        return {
+          id: uid(),
+          name: item,
+          issuer: '',
+          date: '',
+        };
+      }
+
+      const e = toObject(item);
+      return {
+        id: toText(e.id).trim() || uid(),
+        name: toText(e.name ?? e.title),
+        issuer: toText(e.issuer ?? e.organization),
+        date: toText(e.date ?? e.obtainDate),
+      };
+    })
+    .filter(e => hasText(e.name));
+
+  return {
+    ...DEFAULT_RESUME,
+    photo: localPhoto || '',
+    name: toText(source.name),
+    title: toText(source.title ?? source.currentTitle ?? source.recentTitle),
+    location: toText(source.location ?? source.city),
+    phone: toText(source.phone ?? source.mobile ?? source.tel),
+    email: toText(source.email),
+    bio: toText(source.bio ?? source.autobiography),
+    education,
+    workExperience,
+    jobPreferences: {
+      ...DEFAULT_RESUME.jobPreferences,
+      desiredTitle: toText(
+        prefsSource.desiredTitle ??
+        prefsSource.preferredTitle ??
+        source.desiredTitle
+      ),
+      desiredLocations: toArray(
+        prefsSource.desiredLocations ??
+        prefsSource.preferredLocations ??
+        source.desiredLocations,
+        { splitText: true }
+      )
+        .map(v => toText(v).trim())
+        .filter(Boolean),
+      workType: toText(prefsSource.workType ?? prefsSource.type),
+      salary: toText(prefsSource.salary ?? prefsSource.expectedSalary),
+      salaryType: toText(prefsSource.salaryType) || '月薪',
+      availableDate: toText(prefsSource.availableDate),
+      shifts: toArray(
+        prefsSource.shifts ??
+        prefsSource.shift,
+        { splitText: true }
+      )
+        .map(v => toText(v).trim())
+        .filter(Boolean),
+    },
+    languages,
+    skills,
+    certifications,
+    consentTalentPool: toBool(
+      source.consentTalentPool ??
+      source.consent ??
+      source.talentPoolConsent
+    ),
+    updatedAt: toText(source.updatedAt),
+  };
+}
 
 // ═════════════════════════════════════════════════════════════════════════════
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -266,7 +504,7 @@ const EducationSection = ({ entries, onChange, sectionRef }) => {
   const cancelEdit = () => { setEditing(null); setDraft(null); };
 
   const saveEdit = () => {
-    if (!draft.school.trim()) return;
+    if (!hasText(draft?.school)) return;
     if (editing === 'new') {
       onChange([...entries, draft]);
     } else {
@@ -364,7 +602,7 @@ const WorkSection = ({ entries, onChange, sectionRef }) => {
   const cancelEdit = () => { setEditing(null); setDraft(null); };
 
   const saveEdit = () => {
-    if (!draft.company.trim() || !draft.title.trim()) return;
+    if (!hasText(draft?.company) || !hasText(draft?.title)) return;
     if (editing === 'new') onChange([...entries, draft]);
     else onChange(entries.map(e => e.id === editing ? draft : e));
     cancelEdit();
@@ -672,7 +910,7 @@ const CertsSection = ({ entries, onChange, sectionRef }) => {
   const cancelEdit = () => { setEditing(null); setDraft(null); };
 
   const saveEdit = () => {
-    if (!draft.name.trim()) return;
+    if (!hasText(draft?.name)) return;
     if (editing === 'new') onChange([...entries, draft]);
     else onChange(entries.map(e => e.id === editing ? draft : e));
     cancelEdit();
@@ -740,13 +978,14 @@ const CertForm = ({ draft, draftSet, onSave, onCancel }) => (
 
 // ─── Biography ────────────────────────────────────────────────────────────────
 const BioSection = ({ bio, onChange, sectionRef }) => {
-  const len = (bio || '').trim().length;
+  const safeBio = toText(bio);
+  const len = safeBio.trim().length;
   return (
     <SectionCard id="bio" title="自傳" icon="fas fa-file-alt" sectionRef={sectionRef}>
       <textarea
         className={`${inputCls} resize-none w-full`}
         rows={8}
-        value={bio}
+        value={safeBio}
         onChange={e => onChange(e.target.value)}
         placeholder="介紹您的工作經歷、個人特質、職涯目標（建議至少 30 字，計入完成度）"
       />
@@ -819,15 +1058,9 @@ const Profile = () => {
           const { photo: _ignored, ...rest } = loaded;
           // Restore photo from localStorage (local-only display)
           const localPhoto = loadPhotoFromStorage();
-          setResume({
-            ...DEFAULT_RESUME,
-            ...rest,
-            photo: localPhoto,
-            jobPreferences: {
-              ...DEFAULT_RESUME.jobPreferences,
-              ...(rest.jobPreferences || {}),
-            },
-          });
+          setResume(
+            normalizeResumeData(rest, localPhoto)
+          );
         } else {
           // Pre-fill from session user if no cloud resume yet
           const localPhoto = loadPhotoFromStorage();
@@ -835,9 +1068,9 @@ const Profile = () => {
           if (user) {
             setResume(prev => ({
               ...prev,
-              name:  prev.name  || user.name  || '',
-              email: prev.email || user.email || '',
-              phone: prev.phone || user.phone || '',
+              name:  hasText(prev.name)  ? prev.name  : toText(user.name),
+              email: hasText(prev.email) ? prev.email : toText(user.email),
+              phone: hasText(prev.phone) ? prev.phone : toText(user.phone),
               photo: prev.photo || localPhoto,
             }));
           } else {
@@ -1110,37 +1343,43 @@ const Profile = () => {
           />
 
           <EducationSection
-            entries={resume.education}
+            entries={Array.isArray(resume.education) ? resume.education : []}
             onChange={arr => setResume(p => ({ ...p, education: arr }))}
             sectionRef={el => { sectionRefs.current.education = el; }}
           />
 
           <WorkSection
-            entries={resume.workExperience}
+            entries={Array.isArray(resume.workExperience) ? resume.workExperience : []}
             onChange={arr => setResume(p => ({ ...p, workExperience: arr }))}
             sectionRef={el => { sectionRefs.current.work = el; }}
           />
 
           <PreferencesSection
-            prefs={resume.jobPreferences}
+            prefs={
+              resume.jobPreferences &&
+              typeof resume.jobPreferences === 'object' &&
+              !Array.isArray(resume.jobPreferences)
+                ? resume.jobPreferences
+                : DEFAULT_RESUME.jobPreferences
+            }
             onChange={prefs => setResume(p => ({ ...p, jobPreferences: prefs }))}
             sectionRef={el => { sectionRefs.current.preferences = el; }}
           />
 
           <LanguagesSection
-            entries={resume.languages}
+            entries={Array.isArray(resume.languages) ? resume.languages : []}
             onChange={arr => setResume(p => ({ ...p, languages: arr }))}
             sectionRef={el => { sectionRefs.current.languages = el; }}
           />
 
           <SkillsSection
-            skills={resume.skills}
+            skills={Array.isArray(resume.skills) ? resume.skills : []}
             onChange={arr => setResume(p => ({ ...p, skills: arr }))}
             sectionRef={el => { sectionRefs.current.skills = el; }}
           />
 
           <CertsSection
-            entries={resume.certifications}
+            entries={Array.isArray(resume.certifications) ? resume.certifications : []}
             onChange={arr => setResume(p => ({ ...p, certifications: arr }))}
             sectionRef={el => { sectionRefs.current.certs = el; }}
           />
