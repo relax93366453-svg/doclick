@@ -178,7 +178,8 @@ function calcCompletion(resume) {
 }
 
 // ─── Photo helpers ────────────────────────────────────────────────────────────
-// Photo is stored ONLY in localStorage (never in GAS resumeJson to avoid 40KB limit).
+// 照片會保留一份 localStorage 作即時預覽，也會壓縮成小型 JPG 後隨履歷同步到 GAS。
+// 這樣內部「官網完整履歷」在不同電腦也看得到照片，同時避開 TalentResumes 40KB 限制。
 const PHOTO_LS_KEY = 'doclick_resume_photo';
 
 function savePhotoToStorage(b64) {
@@ -206,6 +207,58 @@ function resizeToBase64(file, maxPx = 240, quality = 0.82) {
     };
     reader.onerror = reject;
     reader.readAsDataURL(file);
+  });
+}
+
+function compressPhotoDataUrl(dataUrl, targetChars = 12000) {
+  if (!dataUrl || !String(dataUrl).startsWith('data:image/')) {
+    return Promise.resolve(dataUrl || '');
+  }
+
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+
+    img.onload = () => {
+      const attempts = [
+        { maxPx: 180, quality: 0.68 },
+        { maxPx: 160, quality: 0.60 },
+        { maxPx: 150, quality: 0.52 },
+        { maxPx: 140, quality: 0.46 },
+        { maxPx: 120, quality: 0.42 },
+      ];
+
+      let best = '';
+
+      for (const attempt of attempts) {
+        const ratio = Math.min(
+          attempt.maxPx / img.width,
+          attempt.maxPx / img.height,
+          1
+        );
+
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(img.width * ratio));
+        canvas.height = Math.max(1, Math.round(img.height * ratio));
+
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        const candidate = canvas.toDataURL('image/jpeg', attempt.quality);
+        best = candidate;
+
+        if (candidate.length <= targetChars) {
+          resolve(candidate);
+          return;
+        }
+      }
+
+      // 就算極端圖片仍超過 target，也回傳最小版本；
+      // handleSave 會再次檢查整份履歷大小。
+      resolve(best);
+    };
+
+    img.onerror = reject;
+    img.src = dataUrl;
   });
 }
 
@@ -340,7 +393,7 @@ function normalizeResumeData(raw, localPhoto = '') {
 
   return {
     ...DEFAULT_RESUME,
-    photo: localPhoto || '',
+    photo: toText(source.photo) || localPhoto || '',
     name: toText(source.name),
     title: toText(source.title ?? source.currentTitle ?? source.recentTitle),
     location: toText(source.location ?? source.city),
@@ -1054,13 +1107,16 @@ const Profile = () => {
         const raw = result.resumeJson ?? result.resume ?? null;
         if (result.success && raw) {
           const loaded = typeof raw === 'string' ? JSON.parse(raw) : raw;
-          // Strip any photo that may have leaked into the cloud payload
-          const { photo: _ignored, ...rest } = loaded;
-          // Restore photo from localStorage (local-only display)
           const localPhoto = loadPhotoFromStorage();
-          setResume(
-            normalizeResumeData(rest, localPhoto)
-          );
+
+          // 雲端若已有照片就優先使用；舊會員只有本機照片時仍可自動補回。
+          const normalized = normalizeResumeData(loaded, localPhoto);
+
+          if (normalized.photo) {
+            savePhotoToStorage(normalized.photo);
+          }
+
+          setResume(normalized);
         } else {
           // Pre-fill from session user if no cloud resume yet
           const localPhoto = loadPhotoFromStorage();
@@ -1089,21 +1145,55 @@ const Profile = () => {
   }, []);
 
   // ── Save resume to GAS ──
-  // IMPORTANT: photo (Base64) is EXCLUDED from the GAS payload to keep within 40KB limit.
-  // Photo is stored locally only via savePhotoToStorage().
+  // 照片會先壓成小型 JPG 再一起寫入 resumeJson。
+  // 這樣內部人才招募庫也能讀到照片，不再只存在目前這台瀏覽器。
   const handleSave = async () => {
     const token = getSessionToken();
     if (!token) { setSaveMsg('請先登入。'); return; }
     setSaving(true);
     setSaveMsg('');
+
     try {
-      // Exclude photo from cloud save
-      const { photo, ...resumeWithoutPhoto } = resume;
-      const toSave = { ...resumeWithoutPhoto, updatedAt: new Date().toISOString() };
+      let cloudPhoto = '';
+
+      if (resume.photo) {
+        cloudPhoto = await compressPhotoDataUrl(resume.photo, 12000);
+        savePhotoToStorage(cloudPhoto);
+      }
+
+      const toSave = {
+        ...resume,
+        photo: cloudPhoto,
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Talent API 目前限制整份 resumeJson < 40000 chars。
+      // 先在前端預檢，避免送出後才得到難理解的錯誤。
+      const payloadLength = JSON.stringify(toSave).length;
+
+      if (payloadLength > 38000) {
+        // 如果仍太大，先再降低照片尺寸；文字履歷本身不會被刪除。
+        if (cloudPhoto) {
+          cloudPhoto = await compressPhotoDataUrl(cloudPhoto, 7000);
+          toSave.photo = cloudPhoto;
+          savePhotoToStorage(cloudPhoto);
+        }
+      }
+
+      if (JSON.stringify(toSave).length > 39500) {
+        setSaveMsg('❌ 履歷內容過大，請縮短自傳內容後再儲存。');
+        return;
+      }
+
       const result = await updateResume(token, toSave);
+
       if (result.success) {
-        setResume(prev => ({ ...prev, updatedAt: toSave.updatedAt }));
-        setSaveMsg('✅ 履歷已儲存！');
+        setResume(prev => ({
+          ...prev,
+          photo: toSave.photo,
+          updatedAt: toSave.updatedAt,
+        }));
+        setSaveMsg('✅ 履歷與照片已同步儲存！');
         setTimeout(() => setSaveMsg(''), 3500);
       } else {
         // Session expired on save
@@ -1151,10 +1241,11 @@ const Profile = () => {
     if (!file.type.startsWith('image/')) { alert('請選擇圖片檔案'); return; }
     if (file.size > 5 * 1024 * 1024) { alert('圖片大小請勿超過 5MB'); return; }
     try {
-      const b64 = await resizeToBase64(file);
-      // Store photo in localStorage ONLY – never include in GAS resumeJson
+      const preview = await resizeToBase64(file, 220, 0.75);
+      const b64 = await compressPhotoDataUrl(preview, 12000);
+
+      // 本機預覽 + 下次按「儲存履歷」時同步到雲端
       savePhotoToStorage(b64);
-      // Update display state
       updateField('photo', b64);
     } catch { alert('圖片處理失敗，請重試。'); }
     e.target.value = '';
