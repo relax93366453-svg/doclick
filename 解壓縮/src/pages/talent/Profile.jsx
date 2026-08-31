@@ -219,12 +219,19 @@ function compressPhotoDataUrl(dataUrl, targetChars = 12000) {
     const img = new Image();
 
     img.onload = () => {
+      // 從正常頭像品質一路降到極小備援。
+      // 舊版 Talent API 若仍只有 5000 chars 限制，也有機會自動退回成功。
       const attempts = [
         { maxPx: 180, quality: 0.68 },
         { maxPx: 160, quality: 0.60 },
-        { maxPx: 150, quality: 0.52 },
-        { maxPx: 140, quality: 0.46 },
-        { maxPx: 120, quality: 0.42 },
+        { maxPx: 140, quality: 0.52 },
+        { maxPx: 120, quality: 0.45 },
+        { maxPx: 100, quality: 0.38 },
+        { maxPx: 84,  quality: 0.32 },
+        { maxPx: 72,  quality: 0.28 },
+        { maxPx: 64,  quality: 0.24 },
+        { maxPx: 56,  quality: 0.22 },
+        { maxPx: 48,  quality: 0.20 },
       ];
 
       let best = '';
@@ -252,8 +259,6 @@ function compressPhotoDataUrl(dataUrl, targetChars = 12000) {
         }
       }
 
-      // 就算極端圖片仍超過 target，也回傳最小版本；
-      // handleSave 會再次檢查整份履歷大小。
       resolve(best);
     };
 
@@ -1149,65 +1154,149 @@ const Profile = () => {
   // 這樣內部人才招募庫也能讀到照片，不再只存在目前這台瀏覽器。
   const handleSave = async () => {
     const token = getSessionToken();
-    if (!token) { setSaveMsg('請先登入。'); return; }
+
+    if (!token) {
+      setSaveMsg('❌ 請先登入。');
+      return;
+    }
+
     setSaving(true);
-    setSaveMsg('');
+    setSaveMsg('⏳ 正在同步履歷與照片…');
 
     try {
-      let cloudPhoto = '';
+      const updatedAt = new Date().toISOString();
 
-      if (resume.photo) {
-        cloudPhoto = await compressPhotoDataUrl(resume.photo, 12000);
-        savePhotoToStorage(cloudPhoto);
-      }
+      const buildPayload = async (photoTarget) => {
+        let photo = '';
 
-      const toSave = {
-        ...resume,
-        photo: cloudPhoto,
-        updatedAt: new Date().toISOString(),
+        if (resume.photo) {
+          photo = await compressPhotoDataUrl(resume.photo, photoTarget);
+          savePhotoToStorage(photo);
+        }
+
+        return {
+          ...resume,
+          photo,
+          updatedAt,
+        };
       };
 
-      // Talent API 目前限制整份 resumeJson < 40000 chars。
-      // 先在前端預檢，避免送出後才得到難理解的錯誤。
-      const payloadLength = JSON.stringify(toSave).length;
+      // 第一次：正常品質。
+      let toSave = await buildPayload(9000);
+      let result = await updateResume(token, toSave);
 
-      if (payloadLength > 38000) {
-        // 如果仍太大，先再降低照片尺寸；文字履歷本身不會被刪除。
-        if (cloudPhoto) {
-          cloudPhoto = await compressPhotoDataUrl(cloudPhoto, 7000);
-          toSave.photo = cloudPhoto;
-          savePhotoToStorage(cloudPhoto);
-        }
+      // 若後端仍是舊版 5000 chars 限制，自動把照片再壓小重試。
+      if (
+        !result?.success &&
+        /size limit|exceeds|5000|40000/i.test(String(result?.error || '')) &&
+        resume.photo
+      ) {
+        setSaveMsg('⏳ 後端容量較小，正在自動壓縮照片重試…');
+
+        toSave = await buildPayload(1800);
+        result = await updateResume(token, toSave);
       }
 
-      if (JSON.stringify(toSave).length > 39500) {
-        setSaveMsg('❌ 履歷內容過大，請縮短自傳內容後再儲存。');
-        return;
+      // 再一次極小備援。
+      if (
+        !result?.success &&
+        /size limit|exceeds|5000|40000/i.test(String(result?.error || '')) &&
+        resume.photo
+      ) {
+        toSave = await buildPayload(900);
+        result = await updateResume(token, toSave);
       }
 
-      const result = await updateResume(token, toSave);
-
-      if (result.success) {
-        setResume(prev => ({
-          ...prev,
-          photo: toSave.photo,
-          updatedAt: toSave.updatedAt,
-        }));
-        setSaveMsg('✅ 履歷與照片已同步儲存！');
-        setTimeout(() => setSaveMsg(''), 3500);
-      } else {
-        // Session expired on save
-        if (isSessionError(result.error)) {
+      if (!result?.success) {
+        if (isSessionError(result?.error)) {
           forceSessionExpired();
           setSaveMsg('❌ 登入已過期，請重新登入後再儲存。');
           return;
         }
-        const errCn = translateSaveError(result.error);
+
+        const errCn = translateSaveError(result?.error);
         setSaveMsg(`❌ 儲存失敗：${errCn}`);
+        window.alert(`履歷沒有儲存成功：\n${errCn}`);
+        return;
       }
+
+      // 成功後立刻重新從 GAS 讀一次，確認不是只有前端以為成功。
+      setSaveMsg('⏳ 已送出，正在確認雲端資料…');
+
+      const verify = await getResume(token);
+      let verifiedResume = null;
+
+      if (verify?.success && verify?.resumeJson) {
+        try {
+          verifiedResume =
+            typeof verify.resumeJson === 'string'
+              ? JSON.parse(verify.resumeJson)
+              : verify.resumeJson;
+        } catch (_) {
+          verifiedResume = null;
+        }
+      }
+
+      const photoSaved =
+        !resume.photo ||
+        (
+          verifiedResume &&
+          typeof verifiedResume.photo === 'string' &&
+          verifiedResume.photo.startsWith('data:image/')
+        );
+
+      if (!verifiedResume) {
+        setSaveMsg('⚠️ 已送出，但無法立即確認雲端內容。請重新整理後再確認。');
+        window.alert('履歷已送出，但目前無法立即讀回確認。');
+        return;
+      }
+
+      if (resume.photo && !photoSaved) {
+        setResume(prev => ({
+          ...prev,
+          updatedAt,
+        }));
+        setSaveMsg('⚠️ 履歷已儲存，但照片尚未寫入雲端。');
+        window.alert(
+          '履歷文字已儲存，但照片尚未同步到雲端。\n' +
+          '這通常表示目前部署的 Talent API 容量限制仍是舊版。'
+        );
+        return;
+      }
+
+      const normalized = normalizeResumeData(
+        verifiedResume,
+        loadPhotoFromStorage()
+      );
+
+      setResume(normalized);
+
+      if (normalized.photo) {
+        savePhotoToStorage(normalized.photo);
+      }
+
+      setSaveMsg('✅ 履歷與照片已同步儲存！');
+
+      // 明確提示，避免桌面版訊息太小看不到。
+      window.alert('✅ 履歷與照片已同步儲存！');
+
+      setTimeout(() => {
+        setSaveMsg('');
+      }, 5000);
+
     } catch (err) {
-      setSaveMsg('❌ 網路異常，請稍後再試。');
-      console.error('updateResume error:', err.message);
+      const msg =
+        err?.code === 'API_TIMEOUT'
+          ? '連線逾時，請稍後再試。'
+          : '網路異常，請稍後再試。';
+
+      setSaveMsg(`❌ ${msg}`);
+      window.alert(`履歷沒有儲存成功：\n${msg}`);
+
+      console.error(
+        'updateResume / verify error:',
+        err?.message || err
+      );
     } finally {
       setSaving(false);
     }
@@ -1270,6 +1359,22 @@ const Profile = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
+
+      {saveMsg && (
+        <div
+          className={`fixed top-20 right-4 z-[100] max-w-sm rounded-xl px-4 py-3 text-sm font-semibold shadow-xl border ${
+            saveMsg.startsWith('✅')
+              ? 'bg-green-50 text-green-700 border-green-200'
+              : saveMsg.startsWith('❌')
+                ? 'bg-red-50 text-red-700 border-red-200'
+                : saveMsg.startsWith('⚠️')
+                  ? 'bg-amber-50 text-amber-700 border-amber-200'
+                  : 'bg-white text-gray-700 border-gray-200'
+          }`}
+        >
+          {saveMsg}
+        </div>
+      )}
 
       {/* ── Top Navbar ── */}
       <nav className="bg-white border-b border-gray-100 sticky top-0 z-40 shadow-sm">
