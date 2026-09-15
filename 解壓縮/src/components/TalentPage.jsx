@@ -42,11 +42,17 @@ const TalentPage = ({ onBack }) => {
                         <p className="text-lg text-gray-600 mb-8 leading-relaxed max-w-md">
                             全台首創「職涯地圖卡」制度。在這裡，我們不只發薪水，更投資你的未來。從行政到技術，從兼職到專業管家。
                         </p>
-                        <div className="flex gap-4">
+                        <div className="flex flex-wrap gap-4">
+                            <Link
+                                to="/jobs"
+                                className="bg-talent-600 hover:bg-talent-700 text-white px-8 py-4 rounded-xl font-bold shadow-xl shadow-talent-600/20 transition-all transform hover:-translate-y-1 inline-block text-center"
+                            >
+                                查看最新職缺
+                            </Link>
                             <button
                                 type="button"
                                 onClick={() => setShowSocialModal(true)}
-                                className="bg-talent-600 hover:bg-talent-700 text-white px-8 py-4 rounded-xl font-bold shadow-xl shadow-talent-600/20 transition-all transform hover:-translate-y-1 inline-block text-center"
+                                className="bg-white hover:bg-talent-50 text-talent-600 border-2 border-talent-600 px-8 py-4 rounded-xl font-bold transition-all transform hover:-translate-y-1 inline-block text-center"
                             >
                                 了解愜易居
                             </button>
