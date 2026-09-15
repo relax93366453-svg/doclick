@@ -7,6 +7,7 @@ import { TALENT_LEVELS } from '../constants/data';
 
 const TalentPage = ({ onBack }) => {
     const [showSocialModal, setShowSocialModal] = useState(false);
+    const [showHrModal, setShowHrModal] = useState(false);
     const applicantLoggedIn = isApplicantLoggedIn();
 
     return (
@@ -57,6 +58,14 @@ const TalentPage = ({ onBack }) => {
                                 className="bg-white hover:bg-talent-50 text-talent-600 border-2 border-talent-600 px-8 py-4 rounded-xl font-bold transition-all transform hover:-translate-y-1 inline-block text-center"
                             >
                                 了解愜易居
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setShowHrModal(true)}
+                                className="bg-[#06C755] hover:bg-[#05b84e] text-white px-8 py-4 rounded-xl font-bold shadow-lg shadow-green-500/20 transition-all transform hover:-translate-y-1 inline-flex items-center gap-2 justify-center"
+                            >
+                                <i className="fab fa-line text-lg"></i>
+                                想加入？聯繫人資
                             </button>
                         </div>
                     </div>
@@ -139,6 +148,47 @@ const TalentPage = ({ onBack }) => {
                                 Instagram 官方平台
                             </a>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {showHrModal && (
+                <div
+                    className="fixed inset-0 z-[110] bg-black/50 flex items-center justify-center px-4"
+                    onClick={() => setShowHrModal(false)}
+                >
+                    <div
+                        className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 text-center"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex justify-between items-start gap-4 mb-3 text-left">
+                            <div>
+                                <h2 className="text-2xl font-black text-gray-900">想加入愜易居？</h2>
+                                <p className="text-sm text-gray-500 mt-1">
+                                    掃描 LINE QR Code，直接聯繫人資了解職缺與應徵方式。
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowHrModal(false)}
+                                className="text-gray-400 hover:text-gray-700 text-2xl leading-none"
+                                aria-label="關閉"
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        <div className="mt-5 bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                            <img
+                                src="/doclick/line-hr-qr.png"
+                                alt="愜易居人資 LINE QR Code"
+                                className="w-full max-w-[280px] mx-auto rounded-xl"
+                            />
+                        </div>
+
+                        <p className="mt-4 text-sm font-bold text-gray-700">
+                            LINE 掃碼加入後，請告知想應徵的職缺或工作地區。
+                        </p>
                     </div>
                 </div>
             )}
