@@ -240,6 +240,7 @@ const JobSearch = () => {
   // ── Modal/Apply state ──
   const [selectedJob, setSelectedJob]   = useState(null);
   const [applyJob, setApplyJob]         = useState(null);
+  const [showHrModal, setShowHrModal]   = useState(false);
 
   // ── Mobile drawer ──
   const [drawerOpen, setDrawerOpen]     = useState(false);
@@ -505,6 +506,47 @@ const JobSearch = () => {
       <JobDetailModal job={selectedJob} onClose={() => setSelectedJob(null)} onApply={handleApply} />
       {applyJob && <ApplicationFlow job={applyJob} onClose={() => setApplyJob(null)} />}
 
+      {showHrModal && (
+        <div
+          className="fixed inset-0 z-[110] bg-black/50 flex items-center justify-center px-4"
+          onClick={() => setShowHrModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-start gap-4 mb-3 text-left">
+              <div>
+                <h2 className="text-2xl font-black text-gray-900">想加入愜易居？</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  掃描 LINE QR Code，直接聯繫人資了解職缺與應徵方式。
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowHrModal(false)}
+                className="text-gray-400 hover:text-gray-700 text-2xl leading-none"
+                aria-label="關閉"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="mt-5 bg-gray-50 rounded-2xl p-4 border border-gray-100">
+              <img
+                src="/doclick/line-hr-qr.png"
+                alt="愜易居人資 LINE QR Code"
+                className="w-full max-w-[280px] mx-auto rounded-xl"
+              />
+            </div>
+
+            <p className="mt-4 text-sm font-bold text-gray-700">
+              LINE 掃碼加入後，請告知想應徵的職缺或工作地區。
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Mobile filter drawer overlay */}
       {drawerOpen && (
         <div
@@ -759,7 +801,16 @@ const JobSearch = () => {
               </div>
 
               {/* CTA */}
-              <div className="mt-8 text-center">
+              <div className="mt-8 flex flex-wrap justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowHrModal(true)}
+                  className="inline-flex items-center gap-2 bg-[#06C755] text-white px-6 py-2.5 rounded-xl font-medium hover:bg-[#05b84e] transition text-sm"
+                >
+                  <i className="fab fa-line"></i>
+                  想加入？聯繫人資
+                </button>
+
                 <Link
                   to="/business"
                   className="inline-block bg-talent-600 text-white px-6 py-2.5 rounded-xl font-medium hover:bg-talent-700 transition text-sm"
