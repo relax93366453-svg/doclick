@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import MemberNavbar from '../components/MemberNavbar';
 
 import { TALENT_LEVELS } from '../constants/data';
 
 const TalentPage = ({ onBack }) => {
+    const [showSocialModal, setShowSocialModal] = useState(false);
+
     return (
         <div className="bg-talent-50 min-h-screen font-sans">
             {/* Talent Nav */}
@@ -41,9 +43,13 @@ const TalentPage = ({ onBack }) => {
                             全台首創「職涯地圖卡」制度。在這裡，我們不只發薪水，更投資你的未來。從行政到技術，從兼職到專業管家。
                         </p>
                         <div className="flex gap-4">
-                            <Link to="/register" className="bg-talent-600 hover:bg-talent-700 text-white px-8 py-4 rounded-xl font-bold shadow-xl shadow-talent-600/20 transition-all transform hover:-translate-y-1 inline-block text-center">
-                                啟動職涯地圖
-                            </Link>
+                            <button
+                                type="button"
+                                onClick={() => setShowSocialModal(true)}
+                                className="bg-talent-600 hover:bg-talent-700 text-white px-8 py-4 rounded-xl font-bold shadow-xl shadow-talent-600/20 transition-all transform hover:-translate-y-1 inline-block text-center"
+                            >
+                                了解愜易居
+                            </button>
                         </div>
                     </div>
                     <div className="md:w-1/2 relative">
@@ -77,6 +83,57 @@ const TalentPage = ({ onBack }) => {
                     </div>
                 </div>
             </header>
+
+            {showSocialModal && (
+                <div
+                    className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center px-4"
+                    onClick={() => setShowSocialModal(false)}
+                >
+                    <div
+                        className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex justify-between items-start gap-4 mb-4">
+                            <div>
+                                <h2 className="text-2xl font-black text-gray-900">了解愜易居</h2>
+                                <p className="text-sm text-gray-500 mt-1">
+                                    關注愜易居官方平台，掌握最新職缺、活動與人才資訊。
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowSocialModal(false)}
+                                className="text-gray-400 hover:text-gray-700 text-2xl leading-none"
+                                aria-label="關閉"
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        <div className="grid gap-3">
+                            <a
+                                href="https://www.facebook.com/doclick88/"
+                                target="_blank"
+                                rel="noreferrer"
+                                className="w-full flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-bold transition-colors"
+                            >
+                                <i className="fab fa-facebook-f"></i>
+                                Facebook 官方平台
+                            </a>
+
+                            <a
+                                href="https://www.instagram.com/doclick88"
+                                target="_blank"
+                                rel="noreferrer"
+                                className="w-full flex items-center justify-center gap-3 bg-gray-900 hover:bg-black text-white px-5 py-3 rounded-xl font-bold transition-colors"
+                            >
+                                <i className="fab fa-instagram"></i>
+                                Instagram 官方平台
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Levels */}
             <section id="levels" className="py-20 bg-white">
