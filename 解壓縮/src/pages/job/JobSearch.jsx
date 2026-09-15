@@ -220,6 +220,7 @@ const FilterPanel = ({ nature, setNature, regions, setRegions, salaryMin, setSal
 const JobSearch = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const applicantLoggedIn = isApplicantLoggedIn();
 
   // ── API state ──
   const [apiJobs, setApiJobs] = useState([]);
@@ -544,7 +545,24 @@ const JobSearch = () => {
             <span className="font-bold text-xl text-talent-600 tracking-wider">愜易居</span>
             <span className="text-xs text-gray-400 border-l pl-2">找工作</span>
           </div>
-          <MemberNavbar />
+          {applicantLoggedIn ? (
+            <MemberNavbar />
+          ) : (
+            <div className="flex items-center gap-2">
+              <Link
+                to="/login"
+                className="px-4 py-2 rounded-lg border border-talent-600 text-talent-600 text-sm font-bold hover:bg-talent-50 transition-colors"
+              >
+                登入
+              </Link>
+              <Link
+                to="/register"
+                className="px-4 py-2 rounded-lg bg-talent-600 text-white text-sm font-bold hover:bg-talent-700 transition-colors"
+              >
+                免費註冊
+              </Link>
+            </div>
+          )}
         </div>
       </nav>
 
