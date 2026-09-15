@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import MemberNavbar from '../components/MemberNavbar';
+import { isApplicantLoggedIn } from '../helpers/authHelper';
 
 import { TALENT_LEVELS } from '../constants/data';
 
 const TalentPage = ({ onBack }) => {
     const [showSocialModal, setShowSocialModal] = useState(false);
+    const applicantLoggedIn = isApplicantLoggedIn();
 
     return (
         <div className="bg-talent-50 min-h-screen font-sans">
@@ -24,8 +26,8 @@ const TalentPage = ({ onBack }) => {
                          <a href="#faq" className="hover:text-talent-600">常見問題</a>
                      </div>
 
-                     {/* Right side – unified member navbar */}
-                     <MemberNavbar />
+                     {/* Right side – 首頁只有已登入會員才顯示會員選單 */}
+                     {applicantLoggedIn && <MemberNavbar />}
                 </div>
             </nav>
 
